@@ -106,3 +106,88 @@ test('blocco recente: riprova per ~2 s poi BLOCCO_SCADUTO', (t) => {
   const dt = Date.now() - t0;
   assert.ok(dt >= 1900 && dt < 4000, 'durata ' + dt);
 });
+
+test('due processi trovano lo stesso blocco stale: nessuna proposta persa', async (t) => {
+  const d = tmp(t);
+  const lock = path.join(d, 'proposte.lock');
+  fs.writeFileSync(lock, 'morto');
+  const vecchio = new Date(Date.now() - 11000);
+  fs.utimesSync(lock, vecchio, vecchio);
+  const helper = path.join(__dirname, 'helper-proposte.js');
+  const lancia = (pref) => new Promise((ok, ko) => {
+    const c = fork(helper, [d, pref, '20']);
+    c.on('exit', (code) => (code === 0 ? ok() : ko(new Error('uscita ' + code))));
+  });
+  await Promise.all([lancia('A'), lancia('B')]);
+  assert.strictEqual(creaArchivio(d).elencaProposte().length, 40);
+  assert.deepStrictEqual(fs.readdirSync(d).sort(), ['proposte.json']);
+});
+
+test('il rilascio non cancella un blocco con token diverso', (t) => {
+  const d = tmp(t);
+  const a = creaArchivio(d);
+  const lock = path.join(d, 'proposte.lock');
+  a.conBlocco(() => fs.writeFileSync(lock, 'token-altrui'));
+  assert.strictEqual(fs.readFileSync(lock, 'utf8'), 'token-altrui');
+});
+
+test('il rilascio normale rimuove il blocco', (t) => {
+  const d = tmp(t);
+  creaArchivio(d).aggiungiProposta({ id: 'x' });
+  assert.ok(!fs.existsSync(path.join(d, 'proposte.lock')));
+});
+
+test('renameSync riprova su EPERM/EBUSY/EACCES', (t) => {
+  const d = tmp(t);
+  const orig = fs.renameSync;
+  let n = 0;
+  fs.renameSync = (...args) => {
+    if (n++ < 3) { const e = new Error('busy'); e.code = ['EPERM', 'EBUSY', 'EACCES'][n - 1]; throw e; }
+    return orig(...args);
+  };
+  t.after(() => { fs.renameSync = orig; });
+  creaArchivio(d).scriviStato(Schema.statoDefault());
+  assert.strictEqual(n, 4);
+  assert.ok(fs.existsSync(path.join(d, 'stato.json')));
+});
+
+test('renameSync che fallisce sempre: rilancia dopo 10 tentativi', (t) => {
+  const d = tmp(t);
+  const orig = fs.renameSync;
+  let n = 0;
+  fs.renameSync = () => { n++; const e = new Error('busy'); e.code = 'EPERM'; throw e; };
+  t.after(() => { fs.renameSync = orig; });
+  assert.throws(() => creaArchivio(d).scriviStato(Schema.statoDefault()), (e) => e.code === 'EPERM');
+  assert.strictEqual(n, 10);
+});
+
+test('proposte.json valido ma non array: PROPOSTE_CORROTTE, file intatto', (t) => {
+  const d = tmp(t);
+  const p = path.join(d, 'proposte.json');
+  fs.writeFileSync(p, '{}');
+  const a = creaArchivio(d);
+  const ok = (e) => e instanceof ErroreArchivio && e.code === 'PROPOSTE_CORROTTE';
+  assert.throws(() => a.elencaProposte(), ok);
+  assert.throws(() => a.aggiungiProposta({ id: 'x' }), ok);
+  assert.strictEqual(fs.readFileSync(p, 'utf8'), '{}');
+});
+
+test('proposte.json e ia-config.json troncati: FILE_CORROTTO, file intatti', (t) => {
+  const d = tmp(t);
+  fs.writeFileSync(path.join(d, 'proposte.json'), '[{"id": ');
+  fs.writeFileSync(path.join(d, 'ia-config.json'), '{"abil');
+  const a = creaArchivio(d);
+  const ok = (e) => e instanceof ErroreArchivio && e.code === 'FILE_CORROTTO';
+  assert.throws(() => a.elencaProposte(), ok);
+  assert.throws(() => a.aggiungiProposta({ id: 'x' }), ok);
+  assert.throws(() => a.leggiConfig(), ok);
+  assert.strictEqual(fs.readFileSync(path.join(d, 'proposte.json'), 'utf8'), '[{"id": ');
+});
+
+test('aggiornaProposta ignora patch.id', (t) => {
+  const a = creaArchivio(tmp(t));
+  a.aggiungiProposta({ id: 'p1', stato: 'in_attesa' });
+  const r = a.aggiornaProposta('p1', { id: 'altro', stato: 'approvata' });
+  assert.strictEqual(r.id, 'p1');
+  assert.deepStrictEqual(a.elencaProposte().map((p) => p.id), ['p1']);
+});
