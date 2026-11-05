@@ -161,3 +161,60 @@ test('bersaglio', () => {
   assert.equal(O.bersaglio(s, { tipo: 'routine.modifica', id: 'zz', dati: {} }), null);
   assert.equal(O.bersaglio(s, { tipo: 'sonno.imposta', dati: { data: OGGI } }), null);
 });
+
+// ---- Round correzioni ----
+function conVoci() {
+  const s = nuovo();
+  s.journal[OGGI] = { fattoBene: 'a', daMigliorare: 'b', obiettivoDomani: 'c', voto: '6', votoNumerico: 6 };
+  s.sonnoLog[OGGI] = { oraInizio: '23:00', oraFine: '07:00', oreDormite: 8, qualita: null };
+  return s;
+}
+const datiDiario = { data: OGGI, fattoBene: 'x', daMigliorare: 'y', obiettivoDomani: 'z', voto: '7' };
+const datiSonno = { data: OGGI, oraInizio: '22:00', oraFine: '06:00' };
+
+test('diario/sonno: sovrascrittura richiede baseHash corretto', () => {
+  const s = conVoci();
+  for (const [tipo, dati] of [['diario.imposta', datiDiario], ['sonno.imposta', datiSonno]]) {
+    const giusto = O.hashRecord(O.bersaglio(s, { tipo, dati }));
+    assert.equal(O.validaOperazione(s, { tipo, dati }, OGGI).ok, false, tipo + ' senza baseHash');
+    assert.equal(O.validaOperazione(s, { tipo, baseHash: 'deadbeef', dati }, OGGI).ok, false, tipo + ' baseHash vecchio');
+    assert.equal(O.validaOperazione(s, { tipo, baseHash: giusto, dati }, OGGI).ok, true, tipo + ' baseHash giusto');
+    assert.equal(O.validaOperazione(nuovo(), { tipo, dati }, OGGI).ok, true, tipo + ' nuova voce');
+  }
+});
+
+test('limiti di lunghezza', () => {
+  const v = (tipo, dati) => O.validaOperazione(nuovo(), { tipo, dati }, OGGI);
+  const l = (n) => 'a'.repeat(n);
+  assert.equal(v('task.aggiungi', { nome: l(200), scadenza: OGGI }).ok, true);
+  assert.equal(v('task.aggiungi', { nome: l(201), scadenza: OGGI }).ok, false);
+  assert.equal(v('task.aggiungi', { nome: 'a', scadenza: OGGI, note: l(2001) }).ok, false);
+  assert.equal(v('routine.aggiungi', { nome: l(201), oraInizio: '08:00', giorni: [1] }).ok, false);
+  assert.equal(v('routine.aggiungi', { nome: 'a', descrizione: l(2001), oraInizio: '08:00', giorni: [1] }).ok, false);
+  assert.equal(v('obiettivo.aggiungi', { titolo: l(201), tipo: 'concreto' }).ok, false);
+  assert.equal(v('obiettivo.aggiungi', { titolo: 'a', tipo: 'concreto', descrizione: l(2001) }).ok, false);
+  const col = Array.from({ length: 51 }, (_, i) => 'task:' + i);
+  assert.equal(v('obiettivo.aggiungi', { titolo: 'a', tipo: 'concreto', attivitaCollegate: col }).ok, false);
+  assert.equal(v('obiettivo.aggiungi', { titolo: 'a', tipo: 'concreto', attivitaCollegate: col.slice(0, 50) }).ok, true);
+  assert.equal(v('obiettivo.aggiungi', { titolo: 'a', tipo: 'concreto', tappe: Array.from({ length: 51 }, () => ({})) }).ok, false);
+  assert.equal(v('pasto.aggiungi', { data: OGGI, nome: l(201), kcal: 1, proteine: 0, carboidrati: 0, grassi: 0 }).ok, false);
+  for (const k of ['fattoBene', 'daMigliorare', 'obiettivoDomani']) {
+    assert.equal(v('diario.imposta', { ...datiDiario, [k]: l(2001) }).ok, false, k);
+    assert.equal(v('diario.imposta', { ...datiDiario, [k]: l(2000) }).ok, true, k);
+  }
+});
+
+test('__proto__ annidato in dati -> rifiutato', () => {
+  const g = JSON.parse('[{"__proto__":{"evil":1}}]');
+  assert.equal(O.validaOperazione(nuovo(), { tipo: 'routine.aggiungi', dati: { nome: 'A', oraInizio: '08:00', giorni: g } }, OGGI).ok, false);
+  const t = JSON.parse('{"titolo":"a","tipo":"concreto","tappe":[{"x":{"__proto__":{"evil":1}}}]}');
+  assert.equal(O.validaOperazione(nuovo(), { tipo: 'obiettivo.aggiungi', dati: t }, OGGI).ok, false);
+  assert.equal(({}).evil, undefined);
+});
+
+test('hashRecord con chiave __proto__ non imposta il prototipo e la distingue', () => {
+  const a = JSON.parse('{"__proto__":{"x":1},"b":1}');
+  const b = JSON.parse('{"__proto__":{"x":2},"b":1}');
+  assert.notEqual(O.hashRecord(a), O.hashRecord(b));
+  assert.notEqual(O.hashRecord(a), O.hashRecord({ b: 1 }));
+});

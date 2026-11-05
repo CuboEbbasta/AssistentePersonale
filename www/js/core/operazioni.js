@@ -23,8 +23,12 @@
   function oraValida(v) { return isStr(v) && /^([01]\d|2[0-3]):[0-5]\d$/.test(v); }
   function oraAMinuti(v) { const [h, m] = v.split(':').map(Number); return h * 60 + m; }
 
-  const vNomeNonVuoto = (etichetta) => (v) => (isStr(v) && v.trim() ? null : etichetta + ' obbligatorio');
-  const vTesto = (v) => (isStr(v) ? null : 'deve essere testo');
+  // Limiti di lunghezza per l'input proveniente dall'IA (non presenti nei form)
+  const MAX_NOME = 200, MAX_TESTO = 2000, MAX_ELENCO = 50;
+  const vNomeNonVuoto = (etichetta) => (v) => (!isStr(v) || !v.trim() ? etichetta + ' obbligatorio'
+    : v.length > MAX_NOME ? etichetta + ' troppo lungo (massimo ' + MAX_NOME + ' caratteri)' : null);
+  const vTesto = (v) => (!isStr(v) ? 'deve essere testo'
+    : v.length > MAX_TESTO ? 'testo troppo lungo (massimo ' + MAX_TESTO + ' caratteri)' : null);
   const vData = (v) => (dataValida(v) ? null : 'data non valida (YYYY-MM-DD)');
   const vOra = (v) => (oraValida(v) ? null : 'orario non valido (HH:MM)');
   // ui-routine.js / ui-task.js: slider priorita min=1 max=10
@@ -43,7 +47,7 @@
   const vTipoObiettivo = (v) => (['concreto', 'generale', 'valoriale'].includes(v) ? null : 'tipo obiettivo non valido');
   const vAmbitoObiettivo = (v) => (['1mese', '6mesi', '1anno', '5anni', '10anni'].includes(v) ? null : 'ambito obiettivo non valido');
   // ui-obiettivi.js: attivitaCollegate = ["routine:ID"|"task:ID"]
-  const vCollegate = (v) => (Array.isArray(v) && v.every(x => isStr(x) && /^(routine|task):.+/.test(x)) ? null : 'attivitaCollegate non valide');
+  const vCollegate = (v) => (Array.isArray(v) && v.length > MAX_ELENCO ? 'troppi elementi (massimo ' + MAX_ELENCO + ')' : Array.isArray(v) && v.every(x => isStr(x) && /^(routine|task):.+/.test(x)) ? null : 'attivitaCollegate non valide');
 
   // ui-tipi.js / schema: 'altro' oppure l'id di un tipo esistente
   function vTipoAttivita(stato) {
@@ -187,7 +191,7 @@
   // ---------- Hash (FNV-1a 32 bit su JSON con chiavi ordinate) ----------
   function ordina(v) {
     if (Array.isArray(v)) return v.map(ordina);
-    if (v && typeof v === 'object') { const o = {}; Object.keys(v).sort().forEach(k => { o[k] = ordina(v[k]); }); return o; }
+    if (v && typeof v === 'object') { const o = {}; Object.keys(v).sort().forEach(k => { Object.defineProperty(o, k, { value: ordina(v[k]), enumerable: true, writable: true, configurable: true }); }); return o; }
     return v === undefined ? null : v;
   }
   function hashRecord(valore) {
@@ -223,6 +227,16 @@
       bers = bersaglio(stato, op);
       if (!bers) errori.push('elemento da modificare non trovato');
       else if (op.baseHash !== undefined && op.baseHash !== hashRecord(bers)) errori.push('l\'elemento e cambiato dopo la proposta (baseHash)');
+    }
+
+    if (Array.isArray(op.dati.tappe) && op.dati.tappe.length > MAX_ELENCO) errori.push('tappe: troppi elementi (massimo ' + MAX_ELENCO + ')');
+    // diario/sonno: sovrascrivere una voce esistente richiede il baseHash aggiornato
+    if (d.chiave && !d.richiedeId) {
+      const esistente = bersaglio(stato, op);
+      if (esistente) {
+        if (op.baseHash === undefined) errori.push('esiste gia una voce per questa data: serve baseHash');
+        else if (op.baseHash !== hashRecord(esistente)) errori.push('la voce e stata modificata dopo la proposta (baseHash)');
+      }
     }
 
     const campi = d.campi(stato, oggiISO);
