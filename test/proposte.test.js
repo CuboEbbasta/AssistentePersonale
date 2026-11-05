@@ -122,3 +122,105 @@ test('non_valida quando la validazione fallisce per altri motivi', () => {
   assert.equal(c.stato, 'non_valida');
   assert.ok(c.motivi.length);
 });
+
+// ---------- Round correzioni ----------
+test('proposta non in_attesa: rifiutata, niente duplicati', () => {
+  const s = conTask();
+  const p = nuova(s, [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }]).proposta;
+  const a = P.applicaProposta(s, p, ctx);
+  assert.equal(a.ok, true);
+  const gia = Object.assign({}, p, { stato: 'applicata' });
+  const b = P.applicaProposta(a.stato, gia, ctx);
+  assert.equal(b.ok, false);
+  assert.equal(b.stato, 'non_valida');
+  assert.match(b.motivi[0], /già applicata\/rifiutata/);
+  assert.equal(a.stato.task.length, 2);
+  const c = P.controllaApplicabile(a.stato, gia, OGGI);
+  assert.equal(c.stato, 'non_valida');
+  assert.match(c.motivi[0], /già applicata\/rifiutata/);
+});
+
+test('struttura errata: non_valida, mai TypeError', () => {
+  const s = conTask();
+  const base = nuova(s, [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }]).proposta;
+  const casi = [
+    Object.assign({}, base, { operazioni: undefined }),
+    Object.assign({}, base, { operazioni: Array.from({ length: 51 }, () => base.operazioni[0]) }),
+    Object.assign({}, base, { operazioni: [{ dati: {} }] }),
+    Object.assign({}, base, { operazioni: [] }),
+    null
+  ];
+  casi.forEach(p => {
+    const c = P.controllaApplicabile(s, p, OGGI);
+    assert.equal(c.stato, 'non_valida');
+    assert.ok(c.motivi.length);
+    const a = P.applicaProposta(s, p, ctx);
+    assert.equal(a.ok, false);
+    assert.equal(a.stato, 'non_valida');
+  });
+});
+
+test('creaProposta non lancia con dati non clonabili', () => {
+  const r = nuova(conTask(), [{ tipo: 'task.aggiungi', dati: { nome: 'A', note: () => 1 } }]);
+  assert.equal(r.ok, false);
+  assert.ok(r.errori.length);
+});
+
+test('creaProposta non consuma il vero generaId per la simulazione', () => {
+  const chiamate = [];
+  const gen = (p) => { chiamate.push(p); return p + '_x'; };
+  const r = P.creaProposta({ client: 'ia', motivo: 'm', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }] }, conTask(), OGGI, ADESSO, gen);
+  assert.equal(r.ok, true);
+  assert.deepEqual(chiamate, ['proposta']);
+});
+
+test('anteprima modifica: campi con vecchio→nuovo', () => {
+  const r = nuova(conTask(), [{ tipo: 'task.modifica', id: 't1', dati: { priorita: 8, scadenza: '2026-11-12', nome: 'Studia' } }]);
+  assert.equal(r.ok, true);
+  assert.equal(r.proposta.anteprima[0], 'Modifica task «Studia»: priorita 5→8, scadenza 2026-11-10→2026-11-12');
+});
+
+test('anteprima modifica: testi tagliati a 60 caratteri', () => {
+  const lungo = 'x'.repeat(100);
+  const r = nuova(conTask(), [{ tipo: 'task.modifica', id: 't1', dati: { note: lungo } }]);
+  assert.ok(!r.proposta.anteprima[0].includes('x'.repeat(61)));
+  assert.ok(r.proposta.anteprima[0].includes('x'.repeat(60)));
+});
+
+test('esattamente 50 operazioni accettate', () => {
+  const ops = Array.from({ length: 50 }, () => ({ tipo: 'task.aggiungi', dati: { nome: 'x' } }));
+  const r = nuova(conTask(), ops);
+  assert.equal(r.ok, true);
+  assert.equal(r.proposta.operazioni.length, 50);
+});
+
+test('atomicita: snapshot dello stato originale invariato dopo fallimento', () => {
+  const s = conTask();
+  const r = nuova(s, [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }, { tipo: 'task.aggiungi', dati: { nome: 'B' } }]);
+  r.proposta.operazioni[1].dati.priorita = 99;
+  const snap = JSON.parse(JSON.stringify(s));
+  const a = P.applicaProposta(s, r.proposta, ctx);
+  assert.equal(a.ok, false);
+  assert.deepEqual(s, snap);
+});
+
+test('diario con voce esistente: baseHash, applicabile, poi obsoleta', () => {
+  const s = S.statoDefault();
+  s.journal['2026-11-04'] = { fattoBene: 'x', daMigliorare: 'y', obiettivoDomani: 'z', voto: '6', votoNumerico: 6, votoBase: 6, votoModificatore: 'pieno' };
+  const dati = { data: '2026-11-04', fattoBene: 'a', daMigliorare: 'b', obiettivoDomani: 'c', voto: '7' };
+  const p = nuova(s, [{ tipo: 'diario.imposta', dati }]).proposta;
+  assert.equal(typeof p.operazioni[0].baseHash, 'string');
+  assert.equal(P.controllaApplicabile(s, p, OGGI).stato, 'applicabile');
+  s.journal['2026-11-04'].fattoBene = 'cambiato';
+  assert.equal(P.controllaApplicabile(s, p, OGGI).stato, 'obsoleta');
+});
+
+test('client e motivo: tipo e lunghezza', () => {
+  const op = [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }];
+  const f = (client, motivo) => P.creaProposta({ client, motivo, operazioni: op }, conTask(), OGGI, ADESSO, generaId);
+  assert.equal(f(5, 'm').ok, false);
+  assert.equal(f('ia', {}).ok, false);
+  assert.equal(f('c'.repeat(201), 'm').ok, false);
+  assert.equal(f('ia', 'm'.repeat(2001)).ok, false);
+  assert.equal(f('c'.repeat(200), 'm'.repeat(2000)).ok, true);
+});
