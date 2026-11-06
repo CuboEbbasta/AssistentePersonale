@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "bin": {
+    "ap-ia": "ia/bin/ap-ia.js"
+  },
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:smoke": "node test-smoke.js",
