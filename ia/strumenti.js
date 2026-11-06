@@ -46,7 +46,10 @@ const STRUMENTI = [
   },
   {
     name: 'ap_proponi',
-    description: 'Propone modifiche all\'assistente personale. Non modifica nulla subito: l\'utente deve approvare la proposta. Ogni operazione ha un tipo (per esempio task.aggiungi), un campo dati e, per le modifiche, l\'id dell\'elemento.',
+    description: 'Propone modifiche all\'assistente personale. Non modifica nulla subito: l\'utente deve approvare la proposta. Ogni operazione ha tipo, dati e, per le modifiche, l\'id dell\'elemento. Esempi: '
+      + '{"tipo":"task.aggiungi","dati":{"nome":"Leggere","scadenza":"2026-11-10"}} (obbligatorio: nome); '
+      + '{"tipo":"diario.imposta","dati":{"data":"2026-11-05","fattoBene":"...","daMigliorare":"...","obiettivoDomani":"...","voto":"7+"}} (tutti i campi obbligatori); '
+      + '{"tipo":"pasto.aggiungi","dati":{"data":"2026-11-05","nome":"Pasta","kcal":600,"proteine":20,"carboidrati":90,"grassi":15}} (tutti obbligatori, numeri interi).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -143,6 +146,10 @@ function apLeggi(args, ctx) {
   if (da !== undefined && a !== undefined && da > a) throw new ErroreStrumento('La data «da» deve venire prima di «a».');
   const vista = Permessi.vistaStato(ctx.archivio.leggiStato(), [sezione]);
   if (da === undefined && a === undefined) return vista;
+  if (!CHIAVI_PER_DATA.some(k => Schema.SEZIONI[sezione].includes(k))) {
+    vista.nota = 'da/a ignorati: questa sezione non ha date';
+    return vista;
+  }
   for (const k of CHIAVI_PER_DATA) {
     if (!has(vista, k) || !isObj(vista[k])) continue;
     const filtrato = {};
@@ -158,7 +165,12 @@ function apProponi(args, ctx) {
   const { motivo, operazioni } = args;
   if (typeof motivo !== 'string') throw new ErroreStrumento('Il motivo deve essere un testo.');
   if (!Array.isArray(operazioni) || operazioni.length === 0) throw new ErroreStrumento('Serve almeno un\'operazione.');
+  const tipiValidi = Object.keys(Operazioni.OPERAZIONI);
   operazioni.forEach((op, i) => {
+    if (!op || typeof op !== 'object' || Operazioni.sezioneDi(op.tipo) === null) {
+      const tipo = op && typeof op === 'object' && typeof op.tipo === 'string' ? op.tipo.slice(0, 60) : '(mancante)';
+      throw new ErroreStrumento('Tipo di operazione sconosciuto: ' + tipo + '. Tipi validi: ' + tipiValidi.join(', '));
+    }
     if (!Permessi.puoProporre(ctx.client, op)) {
       throw new ErroreStrumento('Operazione ' + (i + 1) + ': non hai il permesso di proporre questa modifica.');
     }
@@ -170,7 +182,10 @@ function apProponi(args, ctx) {
   );
   if (!r.ok) throw new ErroreStrumento('Proposta non valida: ' + r.errori.join('; '));
   ctx.archivio.aggiungiProposta(r.proposta);
-  return { id: r.proposta.id, stato: 'in_attesa', anteprima: r.proposta.anteprima };
+  return {
+    id: r.proposta.id, stato: 'in_attesa', anteprima: r.proposta.anteprima,
+    messaggio: 'Proposta inviata: la modifica NON è ancora applicata, l\'utente deve approvarla nell\'app. Usa ap_stato_proposta con questo id per controllare.',
+  };
 }
 
 function apStatoProposta(args, ctx) {

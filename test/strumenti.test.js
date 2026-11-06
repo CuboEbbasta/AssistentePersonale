@@ -110,7 +110,8 @@ test('ap_proponi: valido -> una riga in proposte.json, stato.json identico', () 
   assert.strictEqual(r.stato, 'in_attesa');
   assert.ok(r.id);
   assert.strictEqual(r.anteprima.length, 1);
-  assert.deepStrictEqual(Object.keys(r).sort(), ['anteprima', 'id', 'stato']);
+  assert.deepStrictEqual(Object.keys(r).sort(), ['anteprima', 'id', 'messaggio', 'stato']);
+  assert.match(r.messaggio, /NON/);
   const lista = a.elencaProposte();
   assert.strictEqual(lista.length, 1);
   assert.strictEqual(lista[0].client, 'claude');
@@ -162,4 +163,70 @@ test('nessuna risposta espone hash o percorsi', () => {
   ]);
   assert.ok(!out.includes('HASHSEGRETO'));
   assert.ok(!out.includes(dir));
+});
+
+test('ap_proponi: tipo sconosciuto o operazione malformata -> elenco tipi validi', () => {
+  const { a } = conStato(() => {});
+  const c = ctx(a, cl(['agenda']));
+  for (const op of [{ tipo: 'boh.fai', dati: {} }, null, {}, 'x', { tipo: '__proto__' }]) {
+    let err;
+    try { S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: [op] }, c); } catch (e) { err = e; }
+    assert.ok(err instanceof S.ErroreStrumento);
+    assert.match(err.message, /Tipo di operazione sconosciuto/);
+    assert.match(err.message, /Tipi validi: routine.aggiungi, routine.modifica, task.aggiungi/);
+    assert.ok(!/permesso/.test(err.message));
+  }
+  assert.throws(() => S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: [{ tipo: 'diario.imposta', dati: {} }] }, c), /permesso/);
+});
+
+test('ap_proponi: descrizione con esempi', () => {
+  const d = S.STRUMENTI.find(t => t.name === 'ap_proponi').description;
+  for (const k of ['task.aggiungi', 'diario.imposta', 'pasto.aggiungi', 'fattoBene', 'kcal']) assert.ok(d.includes(k), k);
+});
+
+test('ap_proponi: proposta mista -> errore e proposte.json invariato', () => {
+  const { dir, a } = conStato(() => {});
+  const ops = [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }, { tipo: 'diario.imposta', dati: { data: OGGI } }];
+  assert.throws(() => S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: ops }, ctx(a, cl(['agenda']))), S.ErroreStrumento);
+  assert.ok(!fs.existsSync(path.join(dir, 'proposte.json')));
+});
+
+test('ap_leggi: confini di sezione', () => {
+  const { a } = conStato(s => { s.journal['2026-11-01'] = { voto: '7' }; });
+  for (const sez of ['Diario', '__proto__', 'constructor', 5, null, ['diario']]) {
+    assert.throws(() => S.eseguiStrumento('ap_leggi', { sezione: sez }, ctx(a, cl(['diario']))), S.ErroreStrumento, String(sez));
+  }
+  const ag = S.eseguiStrumento('ap_leggi', { sezione: 'agenda' }, ctx(a, cl(['agenda', 'diario'])));
+  assert.deepStrictEqual(Object.keys(ag).sort(), [...Schema.SEZIONI.agenda].sort());
+  assert.ok(!('journal' in ag) && !('impostazioniIA' in ag));
+  assert.throws(() => S.eseguiStrumento('ap_leggi', { sezione: 'agenda' }, ctx(a, cl(['diario']))), S.ErroreStrumento);
+  const di = S.eseguiStrumento('ap_leggi', { sezione: 'diario' }, ctx(a, cl(['diario'])));
+  assert.deepStrictEqual(Object.keys(di), ['journal']);
+  assert.throws(() => S.eseguiStrumento('ap_leggi', { sezione: 'diario' }, ctx(a, cl(['agenda']))), S.ErroreStrumento);
+});
+
+test('ap_leggi: nota se da/a non si applicano', () => {
+  const { a } = conStato(() => {});
+  const r = S.eseguiStrumento('ap_leggi', { sezione: 'obiettivi', da: '2026-11-01' }, ctx(a, cl(['obiettivi'])));
+  assert.strictEqual(r.nota, 'da/a ignorati: questa sezione non ha date');
+  const r2 = S.eseguiStrumento('ap_leggi', { sezione: 'obiettivi' }, ctx(a, cl(['obiettivi'])));
+  assert.ok(!('nota' in r2));
+  const r3 = S.eseguiStrumento('ap_leggi', { sezione: 'diario', da: '2026-11-01' }, ctx(a, cl(['diario'])));
+  assert.ok(!('nota' in r3));
+});
+
+test('proposte.json corrotto -> messaggio senza percorsi', () => {
+  const { dir, a } = conStato(() => {});
+  fs.writeFileSync(path.join(dir, 'proposte.json'), '{non json');
+  let err;
+  try { S.eseguiStrumento('ap_stato_proposta', { id: 'x' }, ctx(a, cl(['agenda']))); } catch (e) { err = e; }
+  assert.ok(err instanceof S.ErroreStrumento);
+  assert.ok(!err.message.includes(dir) && !/proposte.json/.test(err.message));
+});
+
+test('ap_oggi: non espone log ne orarioFisso', () => {
+  const { a } = conStato(s => { s.log[OGGI] = { completamenti: {} }; s.orarioFisso.push({ id: 'o1', giorno: 4, materia: 'X' }); });
+  const r = S.eseguiStrumento('ap_oggi', {}, ctx(a, cl(['agenda'])));
+  assert.deepStrictEqual(Object.keys(r).sort(), ['data', 'routine', 'task']);
+  assert.ok(!JSON.stringify(r).includes('completamenti') && !JSON.stringify(r).includes('materia'));
 });
