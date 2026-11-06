@@ -123,6 +123,17 @@ async function ferma(p) { try { execFileSync('taskkill', ['/PID', String(p.pid),
     await c.ev('(() => { const t = document.getElementById("f-ia-tipo"); t.value = "ollama"; t.dispatchEvent(new Event("change")); })()');
     const gen = await c.ev('(async () => { const r = await ClienteIA.chiamaOllama("Rispondi solo con la parola: ok", ""); return { ok: r.ok, testo: (r.testo || r.errore || "").slice(0, 80) }; })()');
     ok('generazione con il modello scelto (Ollama vero)', gen.ok, gen.testo.replace(/\s+/g, ' '));
+    // chat dell'assistente integrato: la richiesta reale dell'utente deve diventare una proposta da applicare
+    await c.ev('document.getElementById("btn-ia-salva").click()'); await attendi(500);
+    await c.ev('document.getElementById("ia-input").value = "potresti aggiungere questo? - 14:00 alle 15:00: Fumetto per Venerdi"; document.getElementById("btn-ia-invia").click()');
+    let cardChat = false; for (let i = 0; i < 40 && !cardChat; i++) { await attendi(2000); cardChat = await c.ev('/Fumetto/.test(document.getElementById("ia-chat").innerText) && [...document.querySelectorAll("#ia-chat button")].some(b => /Applica/.test(b.textContent))'); }
+    await c.foto('06-chat.png');
+    ok('chat: la richiesta diventa una proposta con Applica', cardChat);
+    if (cardChat) {
+      await c.ev('[...document.querySelectorAll("#ia-chat button")].find(b => /Applica/.test(b.textContent)).click()'); await attendi(1500);
+      const r = await c.ev('Dati.stato().routine.find(x => /Fumetto/.test(x.nome)) || null');
+      ok('chat: dopo Applica la routine Fumetto esiste (14:00, 60 min, venerdì)', r && r.oraInizio === '14:00' && r.durataMinuti === 60 && JSON.stringify(r.giorni) === '[5]', JSON.stringify(r && { o: r.oraInizio, d: r.durataMinuti, g: r.giorni }));
+    }
   } else {
     console.log('   (Ollama non acceso su localhost:11434: salto la prova della scelta del modello)');
   }
