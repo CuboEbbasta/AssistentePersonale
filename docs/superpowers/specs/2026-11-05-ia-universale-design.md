@@ -2,6 +2,8 @@
 
 Data: 2026-11-05 · Stato: **bozza da approvare** · Lingua del progetto: italiano
 
+> **Aggiornamento in esecuzione.** Il file dati sta in `percorsoDati()` (vedi `ia/archivio.js`) e **non** si sposta `userData` di Electron, per non perdere il localStorage esistente. CLI e MCP scrivono solo `proposte.json` e `ia-config.json`: l'unico scrittore di `stato.json` è l'app.
+
 ## Intento e perché
 Assistente Personale è oggi un'app chiusa: tutti i dati (routine, task, dieta, workout, sonno, obiettivi, diario) stanno in un unico JSON (`assistente_stato_v1`) dentro la pagina web, salvato con Capacitor Preferences. Nessun server, nessun file condiviso. L'unica IA prevista è quella integrata (Ollama), che propone e l'utente preme "Applica".
 

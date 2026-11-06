@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Aggiornamento in esecuzione.** Il file dati sta in `percorsoDati()` (vedi `ia/archivio.js`) e **non** si sposta `userData` di Electron, per non perdere il localStorage esistente. CLI e MCP scrivono solo `proposte.json` e `ia-config.json`: l'unico scrittore di `stato.json` è l'app.
+
 **Goal:** Un'IA qualsiasi (a partire da Hermes) legge i dati dell'app e ne **propone** modifiche tramite MCP su HTTP, API/CLI e stdio; l'utente applica o rifiuta ogni proposta dentro l'app.
 
 **Architecture:** Un nucleo puro (schema, operazioni, proposte) in `www/js/core/`, caricabile sia dalla pagina sia da Node. Sopra, in `ia/`, un archivio su file (dati in `userData`), i permessi per client e un unico insieme di strumenti usato da tre adattatori (MCP HTTP, MCP stdio, CLI). **Un solo scrittore dello stato: l'app.** Gli adattatori leggono `stato.json` e scrivono solo `proposte.json`, quindi non c'è conflitto sullo stato.

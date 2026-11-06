@@ -38,12 +38,14 @@ Fuori dalle sue sezioni il client non può né leggere né proporre modifiche.
 | `ap_oggi` | routine di oggi e task di oggi o in ritardo (serve `agenda`) |
 | `ap_leggi` | legge una sezione, con filtro opzionale per date `da`/`a` |
 | `ap_proponi` | propone una o più operazioni (es. `task.aggiungi`), applicate tutte insieme o per nulla |
-| `ap_stato_proposta` | dice se una proposta è in attesa, applicata, rifiutata o obsoleta |
+| `ap_stato_proposta` | dice se una proposta è in attesa, applicata o rifiutata; se è in attesa e non si può più applicare restituisce `applicabile: false` con i motivi |
 
 ## Approvare le proposte
 
 L'IA può solo **proporre**. Apri l'app, **Altro → Proposte IA**, controlla l'anteprima e
-tocca **Applica** (o rifiuta). Una proposta diventa «obsoleta» se nel frattempo il dato è cambiato.
+tocca **Applica** (o **Rifiuta**). Le proposte si approvano **solo nell'app desktop**. Se nel frattempo il dato è cambiato, la proposta non è più applicabile: l'IA la vede come `applicabile: false` insieme ai motivi, e nell'app compare senza il bottone Applica.
+
+L'IA vede i dati **del PC** (la cartella dati sotto), non quelli del telefono: le due copie non sono sincronizzate.
 
 ## Privacy
 
@@ -57,3 +59,7 @@ Cartella dati (o quella indicata da `ASSISTENTE_DATI`): su Windows
 `%APPDATA%\Assistente Personale`, altrove `~/.assistente-personale`. Contiene
 `stato.json` (+ `stato.bak.json`), `proposte.json` e `ia-config.json` (client con
 solo l'hash del token, mai il token).
+
+Nella versione impacchettata dell'app la cartella dati può coincidere con quella
+dell'app stessa (la cartella `userData` di Electron): in quel caso, per usare la CLI
+o il server MCP, imposta `ASSISTENTE_DATI` sulla cartella che l'app usa davvero.
