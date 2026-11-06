@@ -64,6 +64,35 @@ Nella versione impacchettata dell'app la cartella dati può coincidere con quell
 dell'app stessa (la cartella `userData` di Electron): in quel caso, per usare la CLI
 o il server MCP, imposta `ASSISTENTE_DATI` sulla cartella che l'app usa davvero.
 
+## L'assistente integrato: cosa può fare
+
+La chat in **Altro → Assistente IA** può **creare e modificare** tutto ciò che permettono le operazioni dell'app (le stesse delle proposte MCP):
+routine, task, obiettivi (aggiungi e modifica), diario del giorno, pasti e sonno. Non cambia mai nulla da sola: dopo ogni richiesta mostra una
+**proposta** con l'anteprima in italiano e due bottoni, **Applica** e **Ignora**. Se nel frattempo i dati sono cambiati, la proposta risulta
+«non più applicabile» e il motivo è mostrato. Funziona anche su Android/web: parla direttamente col server IA, senza coda MCP.
+
+Esempi di richieste:
+- «potresti aggiungere questo? - 14:00 alle 15:00: Fumetto per Venerdi» → routine Fumetto, ogni venerdì, 14:00, 60 minuti
+- «aggiungi la task comprare il latte, scade domani» → task con scadenza domani
+- «crea una routine sveglia alle 7 dal lunedì al venerdì»
+- «voglio un obiettivo: correre una maratona entro un anno»
+- «scrivi il diario di oggi: fatto bene …, da migliorare …, domani …, voto 7+»
+- «ho mangiato un panino: 450 kcal, 20 g proteine, 50 g carboidrati, 15 g grassi»
+- «stanotte ho dormito dalle 23:30 alle 7:00, qualità 4»
+- «sposta la palestra alle 19» (modifica: l'assistente vede id e nome degli elementi esistenti)
+- Le domande («come dormo meglio?») ricevono solo una risposta, senza proposte.
+
+Come funziona (utile per capire gli errori): l'app manda al modello la data di oggi, l'elenco delle operazioni con i nomi esatti dei campi, alcuni
+esempi, i tuoi routine/task/obiettivi (id e nome) e gli ultimi 6 messaggi; chiede una risposta in JSON (modalità JSON di Ollama o di OpenAI e, su
+Ollama, `think: false` per evitare il ragionamento lungo). La risposta viene normalizzata (giorni in italiano, «14» → 14:00, «domani», priorità
+«alta», ora di fine → durata…) e validata con le regole dell'app. Se non è valida, l'app fa **una sola** nuova richiesta al modello con l'errore;
+se fallisce ancora, ti dice in italiano cosa manca.
+
+**Consiglio sul modello:** con `qwen3:8b` (Ollama) la valutazione automatica (`node scripts/valuta-assistente.js`, 12 richieste in italiano su
+Ollama locale) dà 11/12 in circa un secondo a richiesta con GPU libera; `qwen3:14b` è più lento (decine di secondi se la GPU è impegnata) e non
+migliora molto. Modelli sotto gli 8B o senza buon italiano sbagliano più spesso i campi: l'anteprima ti permette comunque di ignorare. Le richieste
+molto vaghe o ambigue possono dare una proposta diversa da quella che volevi: leggi sempre l'anteprima prima di premere Applica.
+
 ## Scegliere il modello dell'assistente integrato
 
 L'assistente IA dentro l'app (sezione **IA**) non usa solo Ollama: dal menu **Tipo di server** puoi scegliere

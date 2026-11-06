@@ -81,10 +81,12 @@ variabile d'ambiente `OLLAMA_HOST=0.0.0.0` prima di avviarlo, per accettare
 connessioni da altri dispositivi della rete (di default risponde solo a
 "localhost").
 
-L'IA può leggere i tuoi dati (routine, task, obiettivi) e proporre modifiche
-solo a campi di testo libero (nome/descrizione/note) — **non applica mai
-nulla da sola**: ogni proposta compare con un bottone "Applica" da toccare
-tu. Se preferisci un'IA interamente sul telefono, l'unica strada è
+Nella chat puoi chiedere di **creare o modificare** routine, task, obiettivi, diario,
+pasti e sonno (es. «aggiungi la routine Fumetto il venerdì dalle 14 alle 15»).
+L'IA prepara una proposta con anteprima — **non applica mai nulla da sola**:
+tocchi tu «Applica» o «Ignora». Funziona anche da telefono (nessun programma
+aggiuntivo sul PC). Dettagli e consigli sul modello in
+[docs/ia-esterna.md](docs/ia-esterna.md). Se preferisci un'IA interamente sul telefono, l'unica strada è
 installare tu Termux + Ollama con un modello minuscolo e puntare l'app a
 "http://localhost:11434" anche da telefono — funziona con lo stesso
 meccanismo, ma è una configurazione manuale che esula dall'app.
