@@ -15,5 +15,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     statoMigra: (valoreGrezzo) => ipcRenderer.invoke('stato-migra', valoreGrezzo),
     proposteElenca: () => ipcRenderer.invoke('proposte-elenca'),
     proposteAggiorna: (id, patch) => ipcRenderer.invoke('proposte-aggiorna', id, patch)
+  },
+  accesso: {
+    leggi: () => ipcRenderer.invoke('accesso-leggi'),
+    abilita: (on) => ipcRenderer.invoke('accesso-abilita', on),
+    creaClient: (nome, sezioni) => ipcRenderer.invoke('accesso-crea-client', nome, sezioni),
+    rimuoviClient: (nome) => ipcRenderer.invoke('accesso-rimuovi-client', nome)
   }
 });

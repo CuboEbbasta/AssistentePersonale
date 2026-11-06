@@ -17,7 +17,7 @@ const dalla = (...parti) => path.join(RADICE, ...parti);
 const { creaArchivio, percorsoDati } = require(dalla('ia', 'archivio.js'));
 const { creaGestoriDati } = require(dalla('ia', 'ipc.js'));
 const { creaGestoriIA } = require(dalla('ia', 'ipc-ia.js'));
-const { avviaServerMcp } = require(dalla('ia', 'mcp-http.js'));
+const { creaGestoriAccesso } = require(dalla('ia', 'ipc-accesso.js'));
 
 // Cartella dati (stato.json, proposte.json, ia-config.json): percorsoDati(), la stessa del CLI ap-ia.
 // NON si cambia 'userData' di Electron: e' il profilo di Chromium e contiene il vecchio localStorage (Preferences).
@@ -25,6 +25,8 @@ const CARTELLA_DATI = percorsoDati();
 fs.mkdirSync(CARTELLA_DATI, { recursive: true });
 const gestoriDati = creaGestoriDati(creaArchivio(CARTELLA_DATI));
 const gestoriIA = creaGestoriIA();
+// Accesso IA esterna (server MCP + collegamenti): possiede il server, lo avvia/ferma dall'interruttore in Impostazioni.
+const gestoriAccesso = creaGestoriAccesso(creaArchivio(CARTELLA_DATI));
 
 function creaFinestra() {
   const win = new BrowserWindow({
@@ -62,19 +64,11 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-let serverMcp = null;
-
-/** Se l'accesso IA è abilitato (ap-ia abilita), il server MCP parte con l'app: solo 127.0.0.1, token obbligatorio. */
+/** Se l'accesso IA è abilitato (dall'app o con ap-ia abilita), il server MCP parte con l'app: solo 127.0.0.1, token obbligatorio. */
 async function avviaAccessoIA() {
-  try {
-    const archivio = creaArchivio(CARTELLA_DATI);
-    const cfg = archivio.leggiConfig();
-    if (!cfg || cfg.abilitato !== true) return;
-    serverMcp = await avviaServerMcp({ archivio, porta: cfg.porta });
-    console.log('Accesso IA attivo su 127.0.0.1:' + cfg.porta);
-  } catch (e) {
-    console.warn(e && e.code === 'EADDRINUSE' ? 'Accesso IA: porta occupata (forse ap-ia serve è già in esecuzione).' : 'Accesso IA non avviato.');
-  }
+  const r = await gestoriAccesso.avviaSeAbilitato();
+  if (r.ok && r.avviato) console.log('Accesso IA attivo.');
+  else if (!r.ok) console.warn(r.codice === 'PORTA_OCCUPATA' ? 'Accesso IA: porta occupata (forse ap-ia serve è già in esecuzione).' : 'Accesso IA non avviato.');
 }
 
 app.whenReady().then(() => {
@@ -88,7 +82,7 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => { if (serverMcp) { try { serverMcp.close(); } catch (_) { /* ignora */ } } });
+app.on('before-quit', () => { gestoriAccesso.chiudi(); });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
@@ -122,3 +116,9 @@ ipcMain.handle('stato-scrivi', (event, json) => gestoriDati.statoScrivi(json));
 ipcMain.handle('stato-migra', (event, valoreGrezzo) => gestoriDati.statoMigra(valoreGrezzo));
 ipcMain.handle('proposte-elenca', () => gestoriDati.proposteElenca());
 ipcMain.handle('proposte-aggiorna', (event, id, patch) => gestoriDati.proposteAggiorna(id, patch));
+
+// ---- Accesso IA esterna: interruttore, collegamenti, token (ia/ipc-accesso.js). Il token non viene mai registrato nei log. ----
+ipcMain.handle('accesso-leggi', () => gestoriAccesso.accessoLeggi());
+ipcMain.handle('accesso-abilita', (event, on) => gestoriAccesso.accessoAbilita(on));
+ipcMain.handle('accesso-crea-client', (event, nome, sezioni) => gestoriAccesso.accessoCreaClient(nome, sezioni));
+ipcMain.handle('accesso-rimuovi-client', (event, nome) => gestoriAccesso.accessoRimuoviClient(nome));
