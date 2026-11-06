@@ -35,7 +35,16 @@ async function cdp() {
   const foto = async (nome) => { const r = await Promise.race([invia('Page.captureScreenshot', { format: 'png' }), attendi(8000).then(() => null)]); if (r && r.result && r.result.data) fs.writeFileSync(path.join(SCR, nome), Buffer.from(r.result.data, 'base64')); };
   return { ev, foto, chiudi: () => ws.close() };
 }
-function avvia() { return spawn(ELECTRON, [path.join(REPO, 'desktop'), `--remote-debugging-port=${PORTA_CDP}`, `--user-data-dir=${PROFILO}`], { env, stdio: 'ignore' }); }
+function avvia(envApp = env) { return spawn(ELECTRON, [path.join(REPO, 'desktop'), `--remote-debugging-port=${PORTA_CDP}`, `--user-data-dir=${PROFILO}`], { env: envApp, stdio: 'ignore' }); }
+// chiamata JSON-RPC generica (initialize, tools/list...) con token qualunque
+function rpc(token, method, params = {}) {
+  return new Promise((res, rej) => {
+    const d = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params });
+    const r = http.request({ host: '127.0.0.1', port: PORTA_MCP, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, 'Content-Length': Buffer.byteLength(d) } },
+      x => { let t = ''; x.on('data', c => t += c); x.on('end', () => res({ stato: x.statusCode, corpo: t })); });
+    r.on('error', rej); r.end(d);
+  });
+}
 async function ferma(p) { try { execFileSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (_) {} await attendi(1500); }
 
 (async () => {
@@ -145,6 +154,46 @@ async function ferma(p) { try { execFileSync('taskkill', ['/PID', String(p.pid),
   ok('sezione non permessa (diario) rifiutata', /errore|permess|non/i.test(leggiDiario.corpo) && !/journal/.test(leggiDiario.corpo), leggiDiario.corpo.slice(0, 100));
 
   c.chiudi(); await ferma(app);
+
+  // ---- Accesso IA esterna dalla UI (nessun terminale): cartella dati NUOVA, accesso spento ----
+  const DATI2 = fs.mkdtempSync(path.join(os.tmpdir(), 'ap-dati2-'));
+  const Schema = require(path.join(REPO, 'www', 'js', 'core', 'schema.js'));
+  const st0 = Schema.statoDefault(); st0.impostazioni.onboardingCompletato = true;
+  fs.writeFileSync(path.join(DATI2, 'stato.json'), JSON.stringify(st0));
+  ok('porta MCP libera prima dello scenario', await get(`http://127.0.0.1:${PORTA_MCP}/salute`).then(() => false).catch(() => true));
+  app = avvia({ ...process.env, ASSISTENTE_DATI: DATI2 }); c = await cdp(); await attendi(2500);
+  await c.ev('document.querySelector(\'.tab-btn[data-tab="altro"]\').click()'); await attendi(300);
+  await c.ev('[...document.querySelectorAll("[data-figlio]")].find(b => /Impostazioni/.test(b.textContent)).click()'); await attendi(800);
+  ok('UI: sezione «Accesso IA esterna» presente, interruttore spento', await c.ev('(() => { const k = document.getElementById("chk-accesso-ia"); return !!k && !k.checked && !!document.querySelector("[data-accesso-ia]"); })()'));
+  await c.foto('07-accesso-spento.png');
+  await c.ev('document.getElementById("chk-accesso-ia").click()'); await attendi(1200);
+  ok('UI: abilitando, il server MCP risponde su /salute', await get(`http://127.0.0.1:${PORTA_MCP}/salute`).then(t => t === 'ok').catch(() => false));
+  ok('UI: abilitato salvato in ia-config.json', JSON.parse(fs.readFileSync(path.join(DATI2, 'ia-config.json'), 'utf8')).abilitato === true);
+  ok('UI: compare «Nuovo collegamento»', await c.ev('!!document.getElementById("btn-accesso-crea")'));
+  ok('UI: sezioni sensibili spente, agenda/obiettivi accese', await c.ev('(() => { const m = {}; document.querySelectorAll(".chk-sezione-accesso").forEach(k => m[k.value] = k.checked); return m.agenda && m.obiettivi && !m.diario && !m.dieta && !m.workout && !m.sonno; })()'));
+  await c.ev('document.getElementById("f-accesso-nome").value = "prova"; document.getElementById("btn-accesso-crea").click()'); await attendi(1200);
+  await c.foto('08-accesso-token.png');
+  const tokUi = await c.ev('(() => { const m = /[0-9a-f]{64}/.exec(document.getElementById("foglio-contenuto").innerText); return m ? m[0] : null; })()');
+  ok('UI: il token è mostrato nel foglio', !!tokUi);
+  ok('UI: URL e intestazione pronti da copiare', await c.ev('(() => { const t = document.getElementById("foglio-contenuto").innerText; return t.includes("http://127.0.0.1:' + PORTA_MCP + '/mcp") && t.includes("Authorization") && /claude mcp add/.test(t); })()'));
+  const lista = await rpc(tokUi || 'x', 'tools/list');
+  ok('IA: tools/list con il token creato dalla UI funziona', lista.stato === 200 && /ap_oggi/.test(lista.corpo) && /ap_proponi/.test(lista.corpo), 'HTTP ' + lista.stato);
+  const sens = await mcp(tokUi || 'x', 'ap_leggi', { sezione: 'diario' });
+  ok('IA: la sezione sensibile non concessa è rifiutata', /isError":\s*true/.test(sens.corpo) && !/journal/.test(sens.corpo));
+  const confStr = fs.readFileSync(path.join(DATI2, 'ia-config.json'), 'utf8');
+  ok('ia-config.json non contiene il token (solo l\'hash)', tokUi && !confStr.includes(tokUi) && confStr.includes('tokenHash'));
+  await c.ev('document.getElementById("btn-accesso-chiudi").click()'); await attendi(500);
+  ok('UI: dopo la chiusura il token non è più nel DOM', tokUi && await c.ev(`!document.documentElement.outerHTML.includes(${JSON.stringify(tokUi)})`));
+  ok('UI: il collegamento «prova» è in elenco', await c.ev('!!document.querySelector("[data-client=\\"prova\\"]")'));
+  await c.ev('window.confirm = () => true; document.querySelector("[data-client=\\"prova\\"] [data-azione=\\"rimuovi\\"]").click()'); await attendi(1000);
+  ok('UI: il collegamento sparisce dopo «Rimuovi»', await c.ev('!document.querySelector("[data-client=\\"prova\\"]")'));
+  const dopo = await rpc(tokUi || 'x', 'tools/list');
+  ok('IA: dopo la rimozione il token è rifiutato (401)', dopo.stato === 401, 'HTTP ' + dopo.stato);
+  await c.ev('document.getElementById("chk-accesso-ia").click()'); await attendi(1000);
+  ok('UI: spegnendo, il server si ferma', await get(`http://127.0.0.1:${PORTA_MCP}/salute`).then(() => false).catch(() => true));
+  ok('UI: abilitato=false in ia-config.json', JSON.parse(fs.readFileSync(path.join(DATI2, 'ia-config.json'), 'utf8')).abilitato === false);
+  c.chiudi(); await ferma(app);
+
   const falliti = esiti.filter(e => !e[1]);
   console.log(`\n${esiti.length - falliti.length}/${esiti.length} controlli passati`);
   process.exit(falliti.length ? 1 : 0);
