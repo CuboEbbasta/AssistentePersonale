@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const Schema = require('../www/js/core/schema.js');
 const Operazioni = require('../www/js/core/operazioni.js');
 const Proposte = require('../www/js/core/proposte.js');
+const Normalizza = require('../www/js/core/normalizza.js');
 const Permessi = require('./permessi.js');
 
 class ErroreStrumento extends Error {
@@ -163,36 +164,6 @@ function apLeggi(args, ctx) {
 }
 
 
-// ---- Tolleranza per i modelli piccoli (8B): nomi di campo con accenti/maiuscole/sinonimi e numeri scritti come testo ----
-const norm = (k) => String(k).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
-const SINONIMI = {
-  scadenza: ['data', 'entro', 'deadline', 'duedate', 'giorno'],
-  nome: ['titolo', 'title', 'name'], titolo: ['nome', 'title', 'name'],
-  priorita: ['priority', 'prio'], note: ['descrizione', 'description'],
-  oraInizio: ['ora', 'orario', 'inizio', 'start'], durataMinuti: ['durata', 'duration'],
-  durataStimataMinuti: ['durata', 'duration'],
-};
-const CAMPI_NUMERICI = new Set(['priorita', 'durataMinuti', 'durataStimataMinuti', 'kcal', 'proteine', 'carboidrati', 'grassi', 'qualita']);
-
-function normalizzaOperazione(op, stato, oggiISO) {
-  const def = Operazioni.OPERAZIONI[op.tipo];
-  if (!def) return op;
-  if (!def.richiedeId && ('id' in op || 'baseHash' in op)) { op = Object.assign({}, op); delete op.id; delete op.baseHash; } // un "aggiungi" non ha id
-  if (!op.dati || typeof op.dati !== 'object' || Array.isArray(op.dati)) return op;
-  const canonici = Object.keys(def.campi(stato, oggiISO));
-  const out = {};
-  const presenti = new Set(Object.keys(op.dati).filter(k => canonici.includes(k)));
-  for (const [k, v] of Object.entries(op.dati)) {
-    let c = canonici.includes(k) ? k : canonici.find(x => norm(x) === norm(k));
-    if (!c) c = canonici.find(x => (SINONIMI[x] || []).includes(norm(k)));
-    if (c && c !== k && presenti.has(c)) c = null; // il campo giusto c'è già: il sinonimo resta e verrà rifiutato
-    const chiave = c || k;
-    out[chiave] = (CAMPI_NUMERICI.has(chiave) && typeof v === 'string' && /^[0-9]+$/.test(v.trim())) ? Number(v.trim()) : v;
-    if (c) presenti.add(c);
-  }
-  return Object.assign({}, op, { dati: out });
-}
-
 function apProponi(args, ctx) {
   const { motivo, operazioni } = args;
   if (motivo !== undefined && motivo !== null && typeof motivo !== 'string') throw new ErroreStrumento('Il motivo deve essere un testo.');
@@ -212,7 +183,7 @@ function apProponi(args, ctx) {
     throw new ErroreStrumento('Hai già ' + inAttesa + ' proposte in attesa (massimo ' + MAX_IN_ATTESA + '): aspetta che vengano approvate o rifiutate nell app prima di proporne altre.');
   }
   const stato = ctx.archivio.leggiStato();
-  const operazioniNorm = operazioni.map(op => normalizzaOperazione(op, stato, ctx.oggiISO));
+  const operazioniNorm = operazioni.map(op => Normalizza.normalizzaOperazione(op, stato, ctx.oggiISO));
   const r = Proposte.creaProposta(
     { client: ctx.client.nome, motivo: (typeof motivo === 'string' && motivo.trim()) ? motivo : "Richiesta dell'utente", operazioni: operazioniNorm },
     stato, ctx.oggiISO, ctx.adessoISO,
