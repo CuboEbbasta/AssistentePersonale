@@ -213,6 +213,7 @@ h1, h2, h3 {
   border-radius: 4px;
   font-weight: 700;
 }
+.badge[hidden] { display: none; } /* senza questa regola display:inline-flex annulla l'attributo hidden (compariva uno "0" su Altro) */
 .badge-ok { background: var(--ok-soft); color: var(--ok); }
 .badge-warn { background: var(--warn-soft); color: var(--warn); }
 .badge-accent { background: var(--accent-soft); color: var(--accent-deep); }
