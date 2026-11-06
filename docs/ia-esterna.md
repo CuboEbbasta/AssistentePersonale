@@ -56,7 +56,7 @@ rimuovi i client che non usi (`client remove <nome>`). Con un'IA locale i dati r
 ## Dove stanno i file
 
 Cartella dati (o quella indicata da `ASSISTENTE_DATI`): su Windows
-`%APPDATA%\Assistente Personale`, altrove `~/.assistente-personale`. Contiene
+`%APPDATA%\Tarvio`, altrove `~/.tarvio`. Contiene
 `stato.json` (+ `stato.bak.json`), `proposte.json` e `ia-config.json` (client con
 solo l'hash del token, mai il token).
 

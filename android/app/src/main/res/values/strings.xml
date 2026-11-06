@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Assistente Personale</string>
-    <string name="title_activity_main">Assistente Personale</string>
-    <string name="package_name">com.assistente.personale</string>
-    <string name="custom_url_scheme">com.assistente.personale</string>
+    <string name="app_name">Tarvio</string>
+    <string name="title_activity_main">Tarvio</string>
+    <string name="package_name">app.tarvio</string>
+    <string name="custom_url_scheme">app.tarvio</string>
 </resources>

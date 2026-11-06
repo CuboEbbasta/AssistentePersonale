@@ -61,7 +61,7 @@ test('end-to-end: leggo, propongo, l\'utente applica, rileggo; permessi e token'
     const ob = creaClientMcp(porta, b.token);
 
     const init = await ia.rpc('initialize', {});
-    assert.equal(init.corpo.result.serverInfo.name, 'assistente-personale');
+    assert.equal(init.corpo.result.serverInfo.name, 'tarvio');
     const lista = await ia.rpc('tools/list');
     assert.deepEqual(lista.corpo.result.tools.map(t => t.name), ['ap_oggi', 'ap_leggi', 'ap_proponi', 'ap_stato_proposta']);
 

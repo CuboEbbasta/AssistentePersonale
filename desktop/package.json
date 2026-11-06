@@ -1,7 +1,7 @@
 {
-  "name": "assistente-personale-desktop",
+  "name": "tarvio-desktop",
   "version": "1.0.0",
-  "description": "Assistente Personale — versione PC (Electron)",
+  "description": "Tarvio — versione PC (Electron)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,8 +12,8 @@
     "electron-builder": "^25.0.0"
   },
   "build": {
-    "appId": "com.assistente.personale.desktop",
-    "productName": "Assistente Personale",
+    "appId": "app.tarvio.desktop",
+    "productName": "Tarvio",
     "files": [
       "main.js",
       "preload.js",

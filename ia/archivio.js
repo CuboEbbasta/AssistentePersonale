@@ -23,13 +23,23 @@ class ErroreArchivio extends Error {
   }
 }
 
+/** True se la cartella contiene già dati dell'app (una cartella vuota, es. creata da Electron, non conta). */
+function haDati(dir) {
+  return ['stato.json', 'ia-config.json', 'proposte.json'].some(f => fs.existsSync(path.join(dir, f)));
+}
+
 function percorsoDati(env = process.env) {
-  if (env.ASSISTENTE_DATI) return env.ASSISTENTE_DATI;
+  if (env.TARVIO_DATI) return env.TARVIO_DATI;
+  if (env.ASSISTENTE_DATI) return env.ASSISTENTE_DATI; // nome storico della variabile, ancora valido
   if (process.platform === 'win32') {
     const base = env.APPDATA || path.join(env.USERPROFILE || os.homedir(), 'AppData', 'Roaming');
-    return path.join(base, 'Assistente Personale');
+    const nuova = path.join(base, 'Tarvio'), vecchia = path.join(base, 'Assistente Personale');
+    // chi usava già la versione con il vecchio nome non perde i dati: se esiste solo la vecchia cartella si usa quella
+    return !haDati(nuova) && haDati(vecchia) ? vecchia : nuova;
   }
-  return path.join(env.HOME || os.homedir(), '.assistente-personale');
+  const casa = env.HOME || os.homedir();
+  const nuova = path.join(casa, '.tarvio'), vecchia = path.join(casa, '.assistente-personale');
+  return !haDati(nuova) && haDati(vecchia) ? vecchia : nuova;
 }
 
 function dormi(ms) {

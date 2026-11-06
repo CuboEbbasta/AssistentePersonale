@@ -1,6 +1,6 @@
 {
-  "appId": "com.assistente.personale",
-  "appName": "Assistente Personale",
+  "appId": "app.tarvio",
+  "appName": "Tarvio",
   "webDir": "www",
   "plugins": {
     "LocalNotifications": {

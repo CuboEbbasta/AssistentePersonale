@@ -16,7 +16,7 @@ eb('--win', '--dir', '-c.win.signAndEditExecutable=false');
 const cache = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'electron-builder', 'Cache', 'winCodeSign');
 let rcedit = null;
 if (fs.existsSync(cache)) for (const d of fs.readdirSync(cache)) { const f = path.join(cache, d, 'rcedit-x64.exe'); if (fs.existsSync(f)) { rcedit = f; break; } }
-const exe = path.join(DESKTOP, 'dist', 'win-unpacked', 'Assistente Personale.exe');
+const exe = path.join(DESKTOP, 'dist', 'win-unpacked', 'Tarvio.exe');
 if (rcedit) {
   const r = spawnSync(rcedit, [exe, '--set-icon', path.join(DESKTOP, 'build', 'icon.ico')], { stdio: 'inherit' });
   console.log(r.status === 0 ? 'Icona dell\'eseguibile impostata.' : 'Icona dell\'eseguibile NON impostata (rcedit ha fallito).');

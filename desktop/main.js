@@ -32,7 +32,7 @@ function creaFinestra() {
     height: 860,
     minWidth: 380,
     minHeight: 640,
-    title: 'Assistente Personale',
+    title: 'Tarvio',
     icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#eee9e1',
     webPreferences: {
@@ -98,7 +98,7 @@ app.on('window-all-closed', () => {
 ipcMain.handle('esporta-json', async (event, nomeFileSuggerito, contenuto) => {
   const finestra = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePath } = await dialog.showSaveDialog(finestra, {
-    title: 'Salva backup Assistente Personale',
+    title: 'Salva backup Tarvio',
     defaultPath: nomeFileSuggerito,
     filters: [{ name: 'JSON', extensions: ['json'] }]
   });

@@ -237,3 +237,20 @@ test('uno stato.json valido non genera file corrotti', (t) => {
   a.scriviStato(Schema.statoDefault());
   assert.ok(!fs.readdirSync(d).some(n => n.startsWith('stato.corrotto-')));
 });
+
+test('percorsoDati: cartella «Tarvio»; se esiste solo la vecchia «Assistente Personale» si continua a usare quella (nessun dato perso)', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'tarvio-base-'));
+  const env = { APPDATA: base, USERPROFILE: base, HOME: base };
+  const nuova = path.join(base, 'Tarvio'), vecchia = path.join(base, 'Assistente Personale');
+  if (process.platform === 'win32') {
+    assert.strictEqual(percorsoDati(env), nuova);           // nessuna delle due: la nuova
+    fs.mkdirSync(vecchia); fs.writeFileSync(path.join(vecchia, 'ia-config.json'), '{}');
+    assert.strictEqual(percorsoDati(env), vecchia);         // dati solo nella vecchia: resta la vecchia
+    fs.mkdirSync(nuova);                                    // una cartella «Tarvio» vuota (es. creata da Electron) non nasconde i dati vecchi
+    assert.strictEqual(percorsoDati(env), vecchia);
+    fs.writeFileSync(path.join(nuova, 'stato.json'), '{}');
+    assert.strictEqual(percorsoDati(env), nuova);           // dati anche nella nuova: vince la nuova
+  }
+  assert.strictEqual(percorsoDati({ TARVIO_DATI: '/a', ASSISTENTE_DATI: '/b' }), '/a');
+  fs.rmSync(base, { recursive: true, force: true });
+});
