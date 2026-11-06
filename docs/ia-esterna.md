@@ -4,26 +4,36 @@ Un'IA esterna (Claude, Hermes o qualunque client MCP) può **leggere** i tuoi da
 e **proporre** modifiche. Non scrive mai da sola: ogni proposta resta in attesa
 finché non la approvi tu.
 
-## Attivazione
+## Attivazione (dall'app)
 
-Dalla cartella del progetto:
+Nell'app desktop vai in **Altro → Impostazioni → Accesso IA esterna**:
+
+1. Accendi **Consenti a un'IA di usare Tarvio**. Il server parte subito (e riparte da solo a ogni avvio dell'app finché l'interruttore resta acceso).
+2. In **Nuovo collegamento** scrivi un nome (minuscole, numeri, trattini), scegli le sezioni che l'IA può leggere e premi **Crea collegamento**.
+3. Si apre un foglio con il **token**, mostrato **una sola volta**, e due blocchi già pronti: il comando per **Claude Code** (`claude mcp add --transport http ...`) e la configurazione per **Hermes** e altri client MCP. Premi **Copia** e incollali nell'IA. Chiuso il foglio il token non si rivede più: se lo perdi, rimuovi il collegamento e creane uno nuovo.
+4. Per revocare l'accesso a un'IA, premi **Rimuovi** accanto al suo collegamento: smette di funzionare subito, senza riavviare nulla.
+
+- Il server ascolta solo su `127.0.0.1`, porta predefinita **3040**; indirizzo: `http://127.0.0.1:3040/mcp`. Se la porta è occupata da un altro programma l'interruttore te lo dice.
+- Ogni richiesta richiede `Authorization: Bearer <TOKEN>`. Token errato o assente: 401.
+- Un esempio di configurazione per Hermes è in `docs/hermes-mcp-block.example.yaml` (il token va tenuto fuori dal repository).
+
+### Dal terminale (facoltativo)
+
+La CLI resta disponibile nel repository (non è inclusa nell'app installata) e usa gli stessi dati:
 
 ```
 node ia/bin/ap-ia.js client add <nome>      # crea il client e stampa il token (una sola volta: conservalo)
 node ia/bin/ap-ia.js abilita                # accende l'accesso IA (di default è spento)
-node ia/bin/ap-ia.js serve                  # avvia il server MCP
+node ia/bin/ap-ia.js serve                  # avvia il server MCP (non serve se l'app è aperta: lo avvia lei)
 ```
 
-- Il server ascolta solo su `127.0.0.1`, porta predefinita **3040**; indirizzo: `http://127.0.0.1:3040/mcp`.
-- Ogni richiesta richiede `Authorization: Bearer <TOKEN>`. Token errato o assente: 401.
-- Altri comandi: `client list`, `client remove <nome>`, `disabilita`, `proposte`.
-- Un esempio di configurazione per Hermes è in `docs/hermes-mcp-block.example.yaml` (il token va tenuto fuori dal repository).
+Altri comandi: `client list`, `client remove <nome>`, `disabilita`, `proposte`.
 
 ## Permessi per sezione
 
 Ogni client ha un elenco di sezioni: `agenda`, `obiettivi`, `diario`, `dieta`, `workout`, `sonno`.
-Di default un nuovo client ha solo `agenda` e `obiettivi`. Le sezioni sensibili
-(`diario`, `dieta`, `workout`, `sonno`) sono spente finché non le aggiungi esplicitamente:
+Nell'app, un nuovo collegamento ha preselezionate solo `agenda` e `obiettivi`. Le sezioni sensibili
+(`diario`, `dieta`, `workout`, `sonno`) sono spente finché non spunti la casella (marcata «sensibile»). Da terminale:
 
 ```
 node ia/bin/ap-ia.js client add claude --sezioni agenda,obiettivi,workout
@@ -51,7 +61,7 @@ L'IA vede i dati **del PC** (la cartella dati sotto), non quelli del telefono: l
 
 Dieta, workout, sonno e diario sono dati di salute. Con un'IA **cloud** quei dati
 escono dal tuo computer: attiva solo le sezioni che vuoi davvero condividere, e
-rimuovi i client che non usi (`client remove <nome>`). Con un'IA locale i dati restano sul PC.
+rimuovi i collegamenti che non usi (**Rimuovi** nelle Impostazioni). Con un'IA locale i dati restano sul PC.
 
 ## Dove stanno i file
 
