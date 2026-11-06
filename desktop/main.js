@@ -10,6 +10,13 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { creaArchivio, percorsoDati } = require('../ia/archivio.js');
+const { creaGestoriDati } = require('../ia/ipc.js');
+
+// Stessa cartella dati dell'app e della CLI ap-ia: va impostata PRIMA di whenReady.
+const CARTELLA_DATI = percorsoDati();
+app.setPath('userData', CARTELLA_DATI);
+const gestoriDati = creaGestoriDati(creaArchivio(CARTELLA_DATI));
 
 function creaFinestra() {
   const win = new BrowserWindow({
@@ -92,3 +99,10 @@ ipcMain.handle('elenca-modelli-ia', async (event, indirizzoServer) => {
     return { ok: false, errore: 'Impossibile raggiungere ' + indirizzoServer + ' (' + e.message + ')' };
   }
 });
+
+// ---- Dati su file (stato.json, proposte.json): la logica e la validazione sono in ia/ipc.js ----
+ipcMain.handle('stato-leggi', () => gestoriDati.statoLeggi());
+ipcMain.handle('stato-scrivi', (event, json) => gestoriDati.statoScrivi(json));
+ipcMain.handle('stato-migra', (event, valoreGrezzo) => gestoriDati.statoMigra(valoreGrezzo));
+ipcMain.handle('proposte-elenca', () => gestoriDati.proposteElenca());
+ipcMain.handle('proposte-aggiorna', (event, id, patch) => gestoriDati.proposteAggiorna(id, patch));

@@ -8,5 +8,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   esportaJSON: (nomeFile, contenuto) => ipcRenderer.invoke('esporta-json', nomeFile, contenuto),
   chiamaIA: (payload) => ipcRenderer.invoke('chiama-ia', payload),
-  elencaModelliIA: (indirizzoServer) => ipcRenderer.invoke('elenca-modelli-ia', indirizzoServer)
+  elencaModelliIA: (indirizzoServer) => ipcRenderer.invoke('elenca-modelli-ia', indirizzoServer),
+  dati: {
+    statoLeggi: () => ipcRenderer.invoke('stato-leggi'),
+    statoScrivi: (json) => ipcRenderer.invoke('stato-scrivi', json),
+    statoMigra: (valoreGrezzo) => ipcRenderer.invoke('stato-migra', valoreGrezzo),
+    proposteElenca: () => ipcRenderer.invoke('proposte-elenca'),
+    proposteAggiorna: (id, patch) => ipcRenderer.invoke('proposte-aggiorna', id, patch)
+  }
 });

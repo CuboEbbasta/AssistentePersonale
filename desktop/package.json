@@ -17,7 +17,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "../www/**/*"
+      "../www/**/*",
+      "../ia/**/*"
     ],
     "directories": { "output": "dist" },
     "win": { "target": "nsis" },

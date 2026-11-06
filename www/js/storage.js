@@ -25,8 +25,52 @@ const Dati = (function () {
     return (window.Capacitor && window.Capacitor.Plugins) || {};
   }
 
+  // ---- Desktop (Electron): lo stato vive in un file, via IPC (vedi desktop/preload.js) ----
+  function apiFile() {
+    return (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.dati) || null;
+  }
+
+  // Se true, stato.json esiste ma non è leggibile e non c'è un backup valido:
+  // non si salva nulla per non sovrascrivere il file dell'utente.
+  let salvataggioBloccato = false;
+
+  function avvisa(testo) {
+    if (window.App && window.App.mostraToast) window.App.mostraToast(testo, 6000);
+    else console.warn(testo);
+  }
+
+  async function caricaDaFile(api) {
+    let r = await api.statoLeggi();
+    if (r && r.ok && r.json === null) {
+      // primo avvio con il file: importa i dati dal vecchio salvataggio (Preferences), se ci sono
+      const { Preferences } = plugins();
+      const vecchio = Preferences ? await Preferences.get({ key: CHIAVE }) : null;
+      const m = await api.statoMigra((vecchio && vecchio.value) || null);
+      if (m && m.ok && m.esito === 'importato') {
+        avvisa('Dati importati dal vecchio salvataggio nel nuovo file.');
+        r = await api.statoLeggi();
+      } else if (!m || !m.ok) {
+        salvataggioBloccato = true;
+        avvisa('Impossibile importare i dati precedenti: salvataggio sospeso per non perderli.');
+        return statoDefault();
+      }
+    }
+    if (r && r.ok) {
+      if (r.daBackup) avvisa("Il file dei dati era danneggiato: ripristinata l'ultima copia di sicurezza.");
+      return r.json === null ? statoDefault() : JSON.parse(r.json);
+    }
+    salvataggioBloccato = true;
+    avvisa("Il file dei dati non è leggibile e non c'è una copia di sicurezza: salvataggio sospeso, i dati non vengono toccati.");
+    return statoDefault();
+  }
+
   async function carica() {
     try {
+      const api = apiFile();
+      if (api) {
+        statoCorrente = NucleoSchema.migra(await caricaDaFile(api));
+        return statoCorrente;
+      }
       const { Preferences } = plugins();
       const res = Preferences ? await Preferences.get({ key: CHIAVE }) : null;
       statoCorrente = (res && res.value) ? JSON.parse(res.value) : statoDefault();
@@ -34,12 +78,19 @@ const Dati = (function () {
     } catch (e) {
       console.error('Errore caricamento stato, uso i valori di default', e);
       statoCorrente = statoDefault();
+      if (apiFile()) salvataggioBloccato = true; // errore con il file attivo: non sovrascrivere
     }
     return statoCorrente;
   }
 
   async function salva() {
     try {
+      const api = apiFile();
+      if (api) {
+        if (salvataggioBloccato) return false;
+        const r = await api.statoScrivi(JSON.stringify(statoCorrente));
+        return !!(r && r.ok);
+      }
       const { Preferences } = plugins();
       if (Preferences) {
         await Preferences.set({ key: CHIAVE, value: JSON.stringify(statoCorrente) });
