@@ -33,6 +33,7 @@ function creaFinestra() {
     minWidth: 380,
     minHeight: 640,
     title: 'Assistente Personale',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#eee9e1',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

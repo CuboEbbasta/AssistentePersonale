@@ -17,6 +17,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "build/icon.png",
       {
         "from": "../www",
         "to": "www",
@@ -34,16 +35,26 @@
       }
     ],
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "linux": {
       "target": "AppImage"
     },
     "mac": {
       "target": "dmg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   }
 }
