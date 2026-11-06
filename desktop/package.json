@@ -17,12 +17,33 @@
     "files": [
       "main.js",
       "preload.js",
-      "../www/**/*",
-      "../ia/**/*"
+      {
+        "from": "../www",
+        "to": "www",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../ia",
+        "to": "ia",
+        "filter": [
+          "**/*",
+          "!bin/**"
+        ]
+      }
     ],
-    "directories": { "output": "dist" },
-    "win": { "target": "nsis" },
-    "linux": { "target": "AppImage" },
-    "mac": { "target": "dmg" }
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    }
   }
 }

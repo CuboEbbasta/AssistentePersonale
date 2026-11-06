@@ -10,10 +10,14 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { creaArchivio, percorsoDati } = require('../ia/archivio.js');
-const { creaGestoriDati } = require('../ia/ipc.js');
-const { creaGestoriIA } = require('../ia/ipc-ia.js');
-const { avviaServerMcp } = require('../ia/mcp-http.js');
+// Percorso base: nello sviluppo ia/ e www/ stanno accanto a desktop/ (cartella superiore); nel pacchetto installato
+// electron-builder li copia accanto a main.js. Si sceglie quello in cui esistono.
+const RADICE = fs.existsSync(path.join(__dirname, 'ia')) ? __dirname : path.join(__dirname, '..');
+const dalla = (...parti) => path.join(RADICE, ...parti);
+const { creaArchivio, percorsoDati } = require(dalla('ia', 'archivio.js'));
+const { creaGestoriDati } = require(dalla('ia', 'ipc.js'));
+const { creaGestoriIA } = require(dalla('ia', 'ipc-ia.js'));
+const { avviaServerMcp } = require(dalla('ia', 'mcp-http.js'));
 
 // Cartella dati (stato.json, proposte.json, ia-config.json): percorsoDati(), la stessa del CLI ap-ia.
 // NON si cambia 'userData' di Electron: e' il profilo di Chromium e contiene il vecchio localStorage (Preferences).
@@ -38,7 +42,7 @@ function creaFinestra() {
     }
   });
 
-  win.loadFile(path.join(__dirname, '..', 'www', 'index.html'));
+  win.loadFile(dalla('www', 'index.html'));
 
   // Rimuove il menu di default (File/Edit/View...) inutile per questa app;
   // resta disponibile con Alt se serve durante lo sviluppo.
