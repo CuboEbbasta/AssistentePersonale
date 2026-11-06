@@ -135,6 +135,20 @@ const Dati = (function () {
 
   function stato() { return statoCorrente; }
 
+  /**
+   * Sostituisce lo stato vivo con uno nuovo (es. dopo aver applicato una
+   * proposta) e salva. Se il salvataggio fallisce ripristina lo stato
+   * precedente, cosi' memoria e disco restano coerenti. Restituisce l'esito.
+   */
+  async function sostituisciStato(nuovo) {
+    const precedente = statoCorrente;
+    statoCorrente = nuovo;
+    let ok = false;
+    try { ok = await salva(); } catch (e) { ok = false; }
+    if (!ok) statoCorrente = precedente;
+    return ok;
+  }
+
   function logGiorno(dataISO) {
     if (!statoCorrente.log[dataISO]) {
       statoCorrente.log[dataISO] = { tipo: 'abituale', completamenti: {} };
@@ -401,7 +415,7 @@ const Dati = (function () {
   }
 
   return {
-    statoDefault, generaId, carica, salva, stato,
+    statoDefault, generaId, carica, salva, stato, sostituisciStato,
     logGiorno, impostaCompletamento, impostaTipoGiorno, salvaVoceDiario,
     salvaProfilo, registraPeso, salvaPianoDieta, logDietaGiorno, aggiungiPastoLog, rimuoviPastoLog,
     salvaProfiloWorkout, salvaSchedaAdattiva, salvaSchedaPersonalizzata, registraWorkoutGiorno, rimuoviWorkoutGiorno,

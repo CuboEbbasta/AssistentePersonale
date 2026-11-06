@@ -170,6 +170,17 @@
     <div id="ia-corpo"></div>
   </div>
 
+  <!-- ===================== PROPOSTE IA (solo desktop) ===================== -->
+  <div class="view" id="view-proposte">
+    <div class="page-header">
+      <span class="eyebrow">Altro</span>
+      <h1>Proposte IA</h1>
+      <div class="sub">Modifiche suggerite da assistenti esterni: non cambia nulla finché non premi Applica.</div>
+      <div class="sub-nav-pills" id="subnav-proposte"></div>
+    </div>
+    <div id="proposte-corpo"></div>
+  </div>
+
   <!-- ===================== IMPOSTAZIONI ===================== -->
   <div class="view" id="view-impostazioni">
     <div class="page-header">
@@ -188,7 +199,7 @@
   <button class="tab-btn" data-tab="fare"><svg class="icona" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.3 2.3L16 9.3"/></svg>Fare</button>
   <button class="tab-btn" data-tab="salute"><svg class="icona" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l1.8 5 3.4-10 1.8 5H21"/></svg>Salute</button>
   <button class="tab-btn" data-tab="crescita"><svg class="icona" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V11M12 21V5M20 21v-8"/><path d="M2 21h20"/></svg>Crescita</button>
-  <button class="tab-btn" data-tab="altro"><svg class="icona" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>Altro</button>
+  <button class="tab-btn" data-tab="altro"><svg class="icona" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>Altro<span class="badge badge-accent" id="badge-altro" hidden>0</span></button>
 </div>
 
 <!-- ===================== FOGLIO (form overlay) ===================== -->
@@ -242,6 +253,7 @@
 <script src="js/ui-panoramica.js"></script>
 <script src="js/ollama-client.js"></script>
 <script src="js/ui-ia.js"></script>
+<script src="js/ui-proposte.js"></script>
 <script src="js/ui-impostazioni.js"></script>
 <script src="js/ui-onboarding.js"></script>
 <script src="js/app.js"></script>

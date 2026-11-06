@@ -608,12 +608,149 @@ async function main() {
 
   window.close();
 
+  await testProposte();
+
   if (errori.length) {
     console.log('\n❌ TROVATI PROBLEMI:\n' + errori.map(e => ' - ' + e).join('\n'));
     process.exit(1);
   } else {
     console.log('\n✅ Tutti i controlli sono passati.');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Schermata "Proposte IA" (solo desktop: richiede window.electronAPI.dati)
+// ---------------------------------------------------------------------------
+async function caricaAppConApi(electronAPI) {
+  const dom = await JSDOM.fromFile(path.join(WWW, 'index.html'), {
+    url: 'http://app.locale/index.html',
+    runScripts: 'dangerously',
+    resources: { interceptors: [interceptorLocale] },
+    pretendToBeVisual: true,
+    beforeParse(w) { if (electronAPI) w.electronAPI = electronAPI; }
+  });
+  const { window } = dom;
+  window.addEventListener('error', (e) => {
+    errori.push('Errore runtime (proposte): ' + (e.error ? (e.error.stack || e.error.message) : e.message));
+  });
+  await new Promise((resolve) => {
+    if (window.document.readyState === 'complete') return resolve();
+    window.addEventListener('load', resolve);
+  });
+  await new Promise(r => setTimeout(r, 400));
+  return window;
+}
+
+async function testProposte() {
+  const assert = (cond, msg) => { if (!cond) errori.push('ASSERT FALLITO (proposte): ' + msg); };
+  const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+  const Schema = require('./www/js/core/schema.js');
+  const Proposte = require('./www/js/core/proposte.js');
+  const dl = new Date(); const OGGI = dl.getFullYear() + '-' + String(dl.getMonth() + 1).padStart(2, '0') + '-' + String(dl.getDate()).padStart(2, '0');
+  let n = 0;
+  const gid = (p) => p + '_t' + (++n);
+
+  // senza electronAPI: la voce non compare
+  const wSenza = await caricaAppConApi(null);
+  wSenza.App.mostraTab('altro');
+  const pillSenza = Array.from(wSenza.document.querySelectorAll('#subnav-panoramica [data-figlio]')).map(b => b.dataset.figlio);
+  assert(pillSenza.length > 0 && !pillSenza.includes('proposte'), 'senza electronAPI la voce "Proposte IA" non deve comparire');
+  wSenza.close();
+
+  // con electronAPI finto
+  const base = Schema.statoDefault();
+  base.impostazioni.onboardingCompletato = true;
+  base.task.push({ id: 't1', nome: 'Studia', priorita: 5, tipo: 'altro', ambito: 'giorno', scadenza: OGGI, oraPromemoria: null, durataStimataMinuti: null, note: '', completata: false });
+  const crea = (motivo, client, ops) => {
+    const r = Proposte.creaProposta({ client, motivo, operazioni: ops }, base, OGGI, new Date().toISOString(), gid);
+    if (!r.ok) throw new Error('proposta di test non valida: ' + JSON.stringify(r.errori));
+    return r.proposta;
+  };
+  const pOk = crea('Serve ripasso', 'ap-ia', [{ tipo: 'task.aggiungi', dati: { nome: 'Ripassa storia' } }]);
+  const pObs = crea('Rinomina', 'ap-ia', [{ tipo: 'task.modifica', id: 't1', dati: { nome: 'Studia molto' } }]);
+  const pEvil = crea('<img src=x onerror=alert(1)>', '<b>cattivo</b>', [{ tipo: 'task.aggiungi', dati: { nome: 'Altro task' } }]);
+  // lo stato su disco ha t1 gia' cambiato dopo la proposta -> obsoleta
+  const salvato = JSON.parse(JSON.stringify(base));
+  salvato.task[0].nome = 'Studia (cambiato)';
+
+  const chiamate = [];
+  let salvataggioOk = true;
+  const proposte = [pOk, pObs, pEvil];
+  const api = {
+    statoLeggi: async () => ({ ok: true, json: JSON.stringify(salvato), daBackup: false }),
+    statoScrivi: async () => ({ ok: salvataggioOk }),
+    statoMigra: async () => ({ ok: true, esito: 'gia_presente' }),
+    proposteElenca: async () => ({ ok: true, proposte: proposte.filter(p => p.stato === 'in_attesa') }),
+    proposteAggiorna: async (id, patch) => {
+      chiamate.push([id, patch]);
+      const p = proposte.find(x => x.id === id);
+      if (p) p.stato = patch.stato;
+      return { ok: true };
+    }
+  };
+  const w = await caricaAppConApi({ dati: api });
+  const doc = w.document;
+  w.App.mostraTab('altro');
+  await attendi(100);
+  const pill = doc.querySelector('#subnav-panoramica [data-figlio="proposte"]');
+  assert(pill, 'con electronAPI la voce "Proposte IA" deve comparire');
+  assert(pill && pill.textContent.includes('Proposte IA'), 'la voce deve chiamarsi "Proposte IA"');
+  const badge = pill && pill.querySelector('.badge');
+  assert(badge && badge.textContent.trim() === '3', 'il badge deve mostrare 3 (trovato: ' + (badge && badge.textContent) + ')');
+
+  pill.dispatchEvent(new w.Event('click', { bubbles: true }));
+  await attendi(150);
+  const vista = doc.getElementById('view-proposte');
+  assert(vista.classList.contains('attiva'), 'la vista proposte deve aprirsi');
+  assert(vista.textContent.includes('<img src=x onerror=alert(1)>'), 'il testo malevolo deve comparire come testo');
+  assert(vista.textContent.includes('<b>cattivo</b>'), 'anche il client malevolo deve comparire come testo');
+  assert(vista.querySelectorAll('img').length === 0 && vista.querySelectorAll('b').length === 0, 'il testo dell\'IA non deve creare elementi HTML');
+  assert(vista.querySelectorAll('[data-proposta]').length === 3, '3 schede attese');
+  const scheda = (id) => vista.querySelector('[data-proposta="' + id + '"]');
+  const bott = (id, az) => scheda(id) && scheda(id).querySelector('[data-azione="' + az + '"]');
+  assert(bott(pOk.id, 'applica') && bott(pOk.id, 'rifiuta'), 'la proposta applicabile deve avere Applica e Rifiuta');
+  assert(!bott(pObs.id, 'applica'), 'la proposta obsoleta NON deve avere Applica');
+  assert(bott(pObs.id, 'rifiuta'), 'la proposta obsoleta deve avere Rifiuta');
+  assert(/modificat/i.test(scheda(pObs.id).textContent), 'la proposta obsoleta deve mostrare il motivo');
+  assert(scheda(pOk.id).textContent.includes('Ripassa storia'), 'l\'anteprima deve essere mostrata');
+
+  // doppio clic su Applica: applica una volta sola
+  const taskPrima = w.Dati.stato().task.length;
+  const bApplica = bott(pOk.id, 'applica');
+  bApplica.dispatchEvent(new w.Event('click', { bubbles: true }));
+  bApplica.dispatchEvent(new w.Event('click', { bubbles: true }));
+  await attendi(250);
+  assert(w.Dati.stato().task.length === taskPrima + 1, 'Applica (anche con doppio clic) deve aggiungere un solo task (da ' + taskPrima + ' a ' + w.Dati.stato().task.length + ')');
+  assert(w.Dati.stato().task.some(t => t.nome === 'Ripassa storia'), 'il task proposto deve essere in Dati.stato().task');
+  const applicate = chiamate.filter(c => c[0] === pOk.id && c[1].stato === 'applicata');
+  assert(applicate.length === 1, 'proposteAggiorna(id,{stato:"applicata"}) deve essere chiamata una volta (chiamate: ' + applicate.length + ')');
+  assert(!scheda(pOk.id), 'la proposta applicata deve sparire dall\'elenco');
+  const badge2 = doc.querySelector('#subnav-proposte [data-figlio="proposte"] .badge');
+  assert(badge2 && badge2.textContent.trim() === '2', 'il badge deve scendere a 2 (trovato: ' + (badge2 && badge2.textContent) + ')');
+
+  // salvataggio che fallisce: niente segnalazione, stato ripristinato
+  salvataggioOk = false;
+  const nPrima = w.Dati.stato().task.length;
+  const chiamatePrima = chiamate.length;
+  bott(pEvil.id, 'applica').dispatchEvent(new w.Event('click', { bubbles: true }));
+  await attendi(250);
+  assert(chiamate.length === chiamatePrima, 'con salvataggio fallito proposteAggiorna non va chiamata');
+  assert(w.Dati.stato().task.length === nPrima, 'con salvataggio fallito lo stato in memoria resta com\'era');
+  assert(bott(pEvil.id, 'applica') && !bott(pEvil.id, 'applica').disabled, 'dopo il fallimento la proposta resta applicabile e il bottone riabilitato');
+  salvataggioOk = true;
+
+  // rifiuta
+  bott(pObs.id, 'rifiuta').dispatchEvent(new w.Event('click', { bubbles: true }));
+  await attendi(250);
+  assert(chiamate.some(c => c[0] === pObs.id && c[1].stato === 'rifiutata'), 'Rifiuta deve chiamare proposteAggiorna(id,{stato:"rifiutata"})');
+
+  // al rientro in primo piano l'elenco si aggiorna
+  const nuova = crea('Nuova dopo', 'ap-ia', [{ tipo: 'task.aggiungi', dati: { nome: 'Comparsa dopo' } }]);
+  proposte.push(nuova);
+  w.dispatchEvent(new w.Event('focus'));
+  await attendi(200);
+  assert(vista.querySelector('[data-proposta="' + nuova.id + '"]'), 'al focus della finestra l\'elenco deve aggiornarsi');
+  w.close();
 }
 
 main().catch(e => { console.error('Errore fatale nel test:', e); process.exit(1); });

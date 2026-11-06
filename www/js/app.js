@@ -10,11 +10,18 @@ const App = (function () {
     fare: { figli: ['routine', 'task', 'orario'], etichette: { routine: 'Routine', task: 'Task', orario: 'Orario fisso' } },
     salute: { figli: ['dieta', 'workout', 'sonno'], etichette: { dieta: 'Dieta', workout: 'Workout', sonno: 'Sonno' } },
     crescita: { figli: ['obiettivi', 'diario'], etichette: { obiettivi: 'Obiettivi', diario: 'Diario' } },
-    altro: { figli: ['panoramica', 'ia', 'impostazioni'], etichette: { panoramica: 'Panoramica', ia: 'Assistente IA', impostazioni: 'Impostazioni' } }
+    altro: { figli: ['panoramica', 'ia', 'proposte', 'impostazioni'], etichette: { panoramica: 'Panoramica', ia: 'Assistente IA', proposte: 'Proposte IA', impostazioni: 'Impostazioni' } }
   };
   const FIGLIO_A_GRUPPO = {};
   Object.entries(GRUPPI).forEach(([g, def]) => def.figli.forEach(f => { FIGLIO_A_GRUPPO[f] = g; }));
   const ultimoFiglio = { fare: 'routine', salute: 'dieta', crescita: 'obiettivi', altro: 'panoramica' };
+
+  let vistaCorrente = 'oggi';
+
+  // La voce "Proposte IA" esiste solo nella versione desktop (electronAPI.dati).
+  function figliVisibili(gruppo) {
+    return GRUPPI[gruppo].figli.filter(f => f !== 'proposte' || UIProposte.disponibile());
+  }
 
   function mostraToast(msg, ms) {
     const t = document.getElementById('toast');
@@ -44,6 +51,7 @@ const App = (function () {
     else if (nome === 'diario') UiJournal.renderForm(DataUtils.oggiISO());
     else if (nome === 'panoramica') UiPanoramica.render();
     else if (nome === 'ia') UiIA.render();
+    else if (nome === 'proposte') UIProposte.render(document.getElementById('proposte-corpo'));
     else if (nome === 'impostazioni') UiImpostazioni.render();
   }
 
@@ -53,9 +61,17 @@ const App = (function () {
     const def = GRUPPI[gruppo];
     const placeholder = document.getElementById('subnav-' + vista);
     if (!placeholder) return;
-    placeholder.innerHTML = def.figli.map(f =>
+    placeholder.innerHTML = figliVisibili(gruppo).map(f =>
       `<button type="button" class="btn btn-sm ${f === vista ? 'btn-primary' : ''}" data-figlio="${f}">${def.etichette[f]}</button>`
     ).join('');
+    // badge col numero di proposte in attesa (solo numero, creato come nodo)
+    const voceProposte = placeholder.querySelector('[data-figlio="proposte"]');
+    if (voceProposte && UIProposte.conteggio() > 0) {
+      const b = document.createElement('span');
+      b.className = 'badge badge-accent';
+      b.textContent = String(UIProposte.conteggio());
+      voceProposte.appendChild(b);
+    }
     placeholder.querySelectorAll('[data-figlio]').forEach(b => b.addEventListener('click', () => mostraTab(b.dataset.figlio)));
   }
 
@@ -71,6 +87,7 @@ const App = (function () {
     const tabPrincipaleAttiva = gruppo || vista; // "oggi" e' tab principale di se stessa
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('attivo', b.dataset.tab === tabPrincipaleAttiva));
 
+    vistaCorrente = vista;
     aggiornaSubNav(vista);
     renderVista(vista);
   }
@@ -126,6 +143,12 @@ const App = (function () {
     });
 
     UiJournal.inizializza();
+    UIProposte.alCambioConteggio((n) => {
+      aggiornaSubNav(vistaCorrente);
+      const bAltro = document.getElementById('badge-altro');
+      if (bAltro) { bAltro.textContent = String(n); bAltro.hidden = n === 0; }
+    });
+    UIProposte.inizializza();
     mostraTab('oggi');
 
     // Ricontrolla la vista "oggi" quando l'app torna in primo piano
