@@ -67,13 +67,22 @@ function rispondiRpc(msg, client, archivio) {
   }
 }
 
-function creaServerMcp({ archivio, host = '127.0.0.1', porta } = {}) {
-  void host; void porta; // l'ascolto lo avvia il chiamante: server.listen(porta, host)
-
-  function manda(res, codice, corpo, tipo) {
+/**
+ * Crea il server SENZA metterlo in ascolto. Per avviarlo usare solo avviaServerMcp,
+ * che lega sempre 127.0.0.1 (l'host non e configurabile).
+ */
+function creaServerMcp({ archivio } = {}) {
+  function manda(res, codice, corpo, tipo, chiudi) {
     const buf = Buffer.from(corpo || '', 'utf8');
-    res.writeHead(codice, { 'Content-Type': tipo || 'application/json', 'Content-Length': buf.length });
+    const h = { 'Content-Type': tipo || 'application/json', 'Content-Length': buf.length };
+    if (chiudi) h.Connection = 'close';
+    res.writeHead(codice, h);
     res.end(buf);
+  }
+  // Corpo troppo grande: risposta subito, poi la connessione viene chiusa.
+  function troppoGrande(req, res) {
+    res.on('finish', () => req.destroy());
+    manda(res, 413, JSON.stringify({ error: 'corpo troppo grande' }), null, true);
   }
   const errore = (res, codice, testo) => manda(res, codice, JSON.stringify({ error: testo }));
 
@@ -94,26 +103,26 @@ function creaServerMcp({ archivio, host = '127.0.0.1', porta } = {}) {
     }
     if (!config || config.abilitato !== true) return errore(res, 503, 'accesso IA disabilitato');
 
-    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    const m = /^bearer (.+)$/i.exec(req.headers.authorization || '');
     const client = m ? Permessi.autentica(config, m[1]) : null;
     if (!client) return errore(res, 401, 'non autorizzato');
 
     const lungh = Number(req.headers['content-length']);
     if (Number.isFinite(lungh) && lungh > MAX_CORPO) {
-      req.resume();
-      return errore(res, 413, 'corpo troppo grande');
+      return troppoGrande(req, res);
     }
     const pezzi = [];
     let totale = 0;
     let troppo = false;
     req.on('data', (c) => {
       totale += c.length;
-      if (totale > MAX_CORPO) { troppo = true; pezzi.length = 0; return; }
+      if (troppo) return;
+      if (totale > MAX_CORPO) { troppo = true; pezzi.length = 0; troppoGrande(req, res); return; }
       pezzi.push(c);
     });
     req.on('error', () => {});
     req.on('end', () => {
-      if (troppo) return errore(res, 413, 'corpo troppo grande');
+      if (troppo) return;
       let msg;
       try {
         msg = JSON.parse(Buffer.concat(pezzi).toString('utf8'));
@@ -140,4 +149,12 @@ function creaServerMcp({ archivio, host = '127.0.0.1', porta } = {}) {
   return server;
 }
 
-module.exports = { creaServerMcp };
+function avviaServerMcp({ archivio, porta }) {
+  const server = creaServerMcp({ archivio });
+  return new Promise((ok, ko) => {
+    server.once('error', ko);
+    server.listen(porta, '127.0.0.1', () => { server.removeListener('error', ko); ok(server); });
+  });
+}
+
+module.exports = { creaServerMcp, avviaServerMcp, dataLocaleISO };

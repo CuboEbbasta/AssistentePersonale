@@ -6,7 +6,7 @@
  */
 const { creaArchivio, percorsoDati } = require('../archivio.js');
 const Permessi = require('../permessi.js');
-const { creaServerMcp } = require('../mcp-http.js');
+const { avviaServerMcp } = require('../mcp-http.js');
 
 const USO = [
   'Uso: ap-ia <comando>',
@@ -77,13 +77,11 @@ function comandoServe(archivio, out) {
   if (config.abilitato !== true) {
     throw new ErroreCli('L\'accesso IA è disabilitato. Eseguilo prima: ap-ia abilita');
   }
-  const server = creaServerMcp({ archivio, host: '127.0.0.1', porta: config.porta });
-  server.on('error', (e) => {
+  avviaServerMcp({ archivio, porta: config.porta }).then((server) => {
+    out('Server MCP in ascolto su http://127.0.0.1:' + server.address().port + '/mcp (solo questo computer)');
+  }, (e) => {
     process.stderr.write('Impossibile avviare il server: ' + (e && e.code ? e.code : 'errore') + '\n');
     process.exit(1);
-  });
-  server.listen(config.porta, '127.0.0.1', () => {
-    out('Server MCP in ascolto su http://127.0.0.1:' + server.address().port + '/mcp (solo questo computer)');
   });
 }
 

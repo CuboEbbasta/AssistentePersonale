@@ -13,7 +13,7 @@ async function avvia({ abilitato = true } = {}) {
   const archivio = creaArchivio(dir);
   const r = Permessi.creaClient({ abilitato, porta: 0, client: [] }, 'claude', ['agenda', 'obiettivi']);
   archivio.scriviConfig(r.config);
-  const server = creaServerMcp({ archivio, porta: 0 });
+  const server = creaServerMcp({ archivio });
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
   const porta = server.address().port;
   return {
@@ -183,4 +183,119 @@ test('errore interno (non di strumento) -> -32603 senza dettagli', async () => {
     assert.ok(!r.testo.includes('ia-config'));
     assert.ok(r.stato === 500 || r.stato === 503);
   } finally { await t.chiudi(); }
+});
+
+// ---- Round di correzioni: socket grezzi, ordine dei controlli, schema Bearer, data locale ----
+const net = require('node:net');
+const { avviaServerMcp, dataLocaleISO } = require('../ia/mcp-http.js');
+
+function grezza(porta, testo, { attesaMs = 3000 } = {}) {
+  return new Promise((ok, ko) => {
+    const s = net.connect(porta, '127.0.0.1');
+    let buf = '';
+    const fine = () => { clearTimeout(timer); s.destroy(); ok({ stato: Number((/^HTTP\/1\.1 (\d{3})/.exec(buf) || [])[1]), testo: buf }); };
+    const timer = setTimeout(fine, attesaMs);
+    s.on('data', (c) => { buf += c; if (/^HTTP\/1\.1 \d{3}/.test(buf) && buf.includes('\r\n\r\n')) { const m = /content-length: (\d+)/i.exec(buf); const corpo = buf.split('\r\n\r\n')[1] || ''; if (!m || corpo.length >= Number(m[1])) fine(); } });
+    s.on('error', () => {});
+    s.on('close', fine);
+    s.write(testo);
+  });
+}
+const intest = (t, extra = []) => ['POST /mcp HTTP/1.1', 'Host: 127.0.0.1:' + t.porta, 'Content-Type: application/json', 'Authorization: Bearer ' + t.token, ...extra].join('\r\n');
+
+test('413 con Content-Length dichiarato > 100000, senza leggere il corpo', async () => {
+  const t = await avvia();
+  try {
+    const r = await grezza(t.porta, intest(t, ['Content-Length: 100001', 'Connection: close']) + '\r\n\r\n{');
+    assert.strictEqual(r.stato, 413);
+    assert.match(r.testo, /connection: close/i);
+  } finally { await t.chiudi(); }
+});
+
+test('corpo di esattamente 100000 byte passa; 100001 -> 413', async () => {
+  const t = await avvia();
+  try {
+    const base = '{"jsonrpc":"2.0","id":1,"method":"ping"}';
+    const ok = base + ' '.repeat(100000 - base.length);
+    assert.strictEqual(Buffer.byteLength(ok), 100000);
+    assert.strictEqual((await rpc(t.porta, t.token, ok)).stato, 200);
+    assert.strictEqual((await rpc(t.porta, t.token, ok + ' ')).stato, 413);
+  } finally { await t.chiudi(); }
+});
+
+test('corpo chunked oltre il limite: 413 oppure connessione chiusa (mai elaborato); il server resta vivo', async () => {
+  const t = await avvia();
+  try {
+    const r = await new Promise((ok) => {
+      const req = http.request({ host: '127.0.0.1', port: t.porta, method: 'POST', path: '/mcp', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t.token } }, (res) => { res.resume(); ok(res.statusCode); });
+      req.on('error', () => ok('chiusa'));
+      req.write('x'.repeat(200000));
+      req.end();
+    });
+    assert.ok(r === 413 || r === 'chiusa', String(r));
+    assert.strictEqual((await richiesta(t.porta, { metodo: 'GET', percorso: '/salute' })).testo, 'ok');
+  } finally { await t.chiudi(); }
+});
+
+test('ordine: token errato + chunked 200 KB -> 401 (non 413)', async () => {
+  const t = await avvia();
+  try {
+    const r = await new Promise((ok) => {
+      const req = http.request({ host: '127.0.0.1', port: t.porta, method: 'POST', path: '/mcp', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sbagliato' } }, (res) => { res.resume(); ok(res.statusCode); });
+      req.on('error', () => ok('errore'));
+      req.write('x'.repeat(200000));
+      req.end();
+    });
+    assert.strictEqual(r, 401);
+  } finally { await t.chiudi(); }
+});
+
+test('ordine: Origin+token errato -> 403; Content-Type errato+token errato -> 415; disabilitato+token errato -> 503', async () => {
+  const t = await avvia();
+  try {
+    const msg = { jsonrpc: '2.0', id: 1, method: 'ping' };
+    assert.strictEqual((await rpc(t.porta, 'sbagliato', msg, { Origin: 'http://evil.example' })).stato, 403);
+    const r = await richiesta(t.porta, { headers: { 'Content-Type': 'text/plain', Authorization: 'Bearer sbagliato' }, corpo: '{}' });
+    assert.strictEqual(r.stato, 415);
+    t.archivio.scriviConfig({ ...t.archivio.leggiConfig(), abilitato: false });
+    assert.strictEqual((await rpc(t.porta, 'sbagliato', msg)).stato, 503);
+  } finally { await t.chiudi(); }
+});
+
+test('Authorization malformata -> 401; schema bearer case-insensitive; Host LOCALHOST:porta ok', async () => {
+  const t = await avvia();
+  try {
+    const msg = { jsonrpc: '2.0', id: 1, method: 'ping' };
+    const con = (auth) => richiesta(t.porta, { headers: { 'Content-Type': 'application/json', Authorization: auth }, corpo: JSON.stringify(msg) });
+    assert.strictEqual((await con('Basic x')).stato, 401);
+    assert.strictEqual((await con('Bearer ')).stato, 401);
+    assert.strictEqual((await con('Bearer')).stato, 401);
+    assert.strictEqual((await con('bearer ' + t.token)).stato, 200);
+    assert.strictEqual((await con('BEARER ' + t.token)).stato, 200);
+    assert.strictEqual((await rpc(t.porta, t.token, msg, { Host: 'LOCALHOST:' + t.porta })).stato, 200);
+  } finally { await t.chiudi(); }
+});
+
+test('dataLocaleISO usa la data locale, non UTC', () => {
+  assert.strictEqual(dataLocaleISO(new Date(2026, 10, 5, 23, 59, 59)), '2026-11-05');
+  assert.strictEqual(dataLocaleISO(new Date(2026, 0, 1, 0, 0, 1)), '2026-01-01');
+});
+
+test('config corrotta -> esattamente 500, senza dettagli', async () => {
+  const t = await avvia();
+  try {
+    fs.writeFileSync(path.join(t.dir, 'ia-config.json'), '{rotto');
+    const r = await rpc(t.porta, t.token, { jsonrpc: '2.0', id: 1, method: 'ping' });
+    assert.strictEqual(r.stato, 500);
+    assert.ok(!r.testo.includes(t.dir));
+  } finally { await t.chiudi(); }
+});
+
+test('avviaServerMcp ascolta solo su 127.0.0.1 e risolve col server in ascolto', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-http-'));
+  const server = await avviaServerMcp({ archivio: creaArchivio(dir), porta: 0 });
+  try {
+    assert.strictEqual(server.address().address, '127.0.0.1');
+    assert.strictEqual((await richiesta(server.address().port, { metodo: 'GET', percorso: '/salute' })).testo, 'ok');
+  } finally { server.close(); server.closeAllConnections(); }
 });
