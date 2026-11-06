@@ -49,6 +49,8 @@
       periodiAnno: [],  // { id, titolo, tipo:'esami'|'studio'|'lavoro'|'altro', dataInizio, dataFine, note }
       impostazioniIA: {
         abilitata: false,
+        tipoServer: 'ollama', // 'ollama' | 'openai' (qualunque server compatibile OpenAI: LiteLLM, LM Studio...)
+        chiaveApi: '', // facoltativa; resta salvata sul dispositivo
         indirizzoServer: 'http://localhost:11434', // su PC di norma localhost; dal telefono, l'IP del PC in rete locale
         modello: 'qwen3:8b' // cambiabile liberamente dalle impostazioni
       },
@@ -104,6 +106,10 @@
         });
       }
       if (!s.impostazioniIA) s.impostazioniIA = def.impostazioniIA;
+      else {
+        if (!s.impostazioniIA.tipoServer) s.impostazioniIA.tipoServer = def.impostazioniIA.tipoServer;
+        if (typeof s.impostazioniIA.chiaveApi !== 'string') s.impostazioniIA.chiaveApi = def.impostazioniIA.chiaveApi;
+      }
     return s;
   }
 

@@ -12,12 +12,14 @@ const path = require('path');
 const fs = require('fs');
 const { creaArchivio, percorsoDati } = require('../ia/archivio.js');
 const { creaGestoriDati } = require('../ia/ipc.js');
+const { creaGestoriIA } = require('../ia/ipc-ia.js');
 
 // Cartella dati (stato.json, proposte.json, ia-config.json): percorsoDati(), la stessa del CLI ap-ia.
 // NON si cambia 'userData' di Electron: e' il profilo di Chromium e contiene il vecchio localStorage (Preferences).
 const CARTELLA_DATI = percorsoDati();
 fs.mkdirSync(CARTELLA_DATI, { recursive: true });
 const gestoriDati = creaGestoriDati(creaArchivio(CARTELLA_DATI));
+const gestoriIA = creaGestoriIA();
 
 function creaFinestra() {
   const win = new BrowserWindow({
@@ -85,32 +87,10 @@ ipcMain.handle('esporta-json', async (event, nomeFileSuggerito, contenuto) => {
   }
 });
 
-// ---- IA: chiamate a Ollama dal processo main (Node ha fetch nativo, nessun problema di CORS) ----
-ipcMain.handle('chiama-ia', async (event, { indirizzoServer, corpo }) => {
-  try {
-    const risposta = await fetch(indirizzoServer.replace(/\/+$/, '') + '/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpo)
-    });
-    if (!risposta.ok) return { ok: false, errore: 'Il server ha risposto con codice ' + risposta.status };
-    const dati = await risposta.json();
-    return { ok: true, testo: dati.response };
-  } catch (e) {
-    return { ok: false, errore: 'Impossibile raggiungere il server IA: ' + e.message };
-  }
-});
-
-ipcMain.handle('elenca-modelli-ia', async (event, indirizzoServer) => {
-  try {
-    const risposta = await fetch(indirizzoServer.replace(/\/+$/, '') + '/api/tags');
-    if (!risposta.ok) return { ok: false, errore: 'Il server ha risposto con codice ' + risposta.status };
-    const dati = await risposta.json();
-    return { ok: true, modelli: (dati.models || []).map(m => m.name) };
-  } catch (e) {
-    return { ok: false, errore: 'Impossibile raggiungere ' + indirizzoServer + ' (' + e.message + ')' };
-  }
-});
+// ---- IA: chiamate al server IA dal processo main (Node ha fetch nativo, nessun problema di CORS) ----
+// Validazione, timeout e messaggi di errore sicuri sono in ia/ipc-ia.js.
+ipcMain.handle('chiama-ia', (event, arg) => gestoriIA.chiama(arg));
+ipcMain.handle('elenca-modelli-ia', (event, arg) => gestoriIA.elencaModelli(arg));
 
 // ---- Dati su file (stato.json, proposte.json): la logica e la validazione sono in ia/ipc.js ----
 ipcMain.handle('stato-leggi', () => gestoriDati.statoLeggi());
