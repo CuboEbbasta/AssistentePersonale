@@ -1,0 +1,14 @@
+# Esempio generico per un client MCP su HTTP (es. Hermes).
+# Sostituisci <TOKEN> con quello stampato da `node ia/bin/ap-ia.js client add <nome>`.
+# Non salvare il token vero in file versionati.
+mcp_servers:
+  assistente:
+    url: "http://127.0.0.1:3040/mcp"
+    headers:
+      Authorization: "Bearer <TOKEN>"
+    tools:
+      include:
+        - ap_oggi
+        - ap_leggi
+        - ap_proponi
+        - ap_stato_proposta

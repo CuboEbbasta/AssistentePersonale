@@ -89,6 +89,12 @@ installare tu Termux + Ollama con un modello minuscolo e puntare l'app a
 "http://localhost:11434" anche da telefono — funziona con lo stesso
 meccanismo, ma è una configurazione manuale che esula dall'app.
 
+## Usare l'app con un'IA
+Un'IA esterna (Claude, Hermes, qualunque client MCP) può leggere i dati che
+scegli tu e *proporre* modifiche, che applichi solo tu da Altro → Proposte IA.
+L'accesso è spento di default e il server ascolta solo su 127.0.0.1.
+Istruzioni e avvertenze sulla privacy: [docs/ia-esterna.md](docs/ia-esterna.md).
+
 ## Nota sulla UI
 Secondo giro di design, per allontanarsi dall'aspetto "generico da IA"
 segnalato: palette nuova (blu inchiostro su carta fredda, non più
