@@ -1,6 +1,6 @@
 {
-  "appId": "app.tarvio",
-  "appName": "Tarvio",
+  "appId": "app.kyklion",
+  "appName": "Kyklion",
   "webDir": "www",
   "plugins": {
     "LocalNotifications": {

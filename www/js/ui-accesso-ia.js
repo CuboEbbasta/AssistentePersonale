@@ -96,7 +96,7 @@ const UiAccessoIA = (function () {
     chk.id = 'chk-accesso-ia';
     chk.checked = r.abilitato === true;
     riga.appendChild(chk);
-    riga.appendChild(el('strong', null, 'Consenti a un\'IA di usare Tarvio'));
+    riga.appendChild(el('strong', null, 'Consenti a un\'IA di usare Kyklion'));
     card.appendChild(riga);
 
     let stato;
@@ -156,7 +156,7 @@ const UiAccessoIA = (function () {
   }
 
   async function rimuovi(nome) {
-    if (!confirm('Rimuovere il collegamento «' + nome + '»? Quell\'IA non potrà più accedere a Tarvio.')) return;
+    if (!confirm('Rimuovere il collegamento «' + nome + '»? Quell\'IA non potrà più accedere a Kyklion.')) return;
     let res = null;
     try { res = await api().rimuoviClient(nome); } catch (_) { res = null; }
     toast(res && res.ok ? 'Collegamento rimosso.' : (res && res.errore) || 'Non riesco a rimuovere il collegamento.');
@@ -255,8 +255,8 @@ const UiAccessoIA = (function () {
 
   function mostraToken(nome, token, porta) {
     const url = 'http://127.0.0.1:' + porta + '/mcp';
-    const comandoClaude = 'claude mcp add --transport http tarvio ' + url + ' --header "Authorization: Bearer ' + token + '"';
-    const configGenerica = JSON.stringify({ mcpServers: { tarvio: { url, headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
+    const comandoClaude = 'claude mcp add --transport http kyklion ' + url + ' --header "Authorization: Bearer ' + token + '"';
+    const configGenerica = JSON.stringify({ mcpServers: { kyklion: { url, headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
 
     const f = document.getElementById('foglio-contenuto');
     if (!f || !window.App || !window.App.apriFoglio) return;

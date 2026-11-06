@@ -29,17 +29,20 @@ function haDati(dir) {
 }
 
 function percorsoDati(env = process.env) {
+  if (env.KYKLION_DATI) return env.KYKLION_DATI;
   if (env.TARVIO_DATI) return env.TARVIO_DATI;
   if (env.ASSISTENTE_DATI) return env.ASSISTENTE_DATI; // nome storico della variabile, ancora valido
+  // Cartelle in ordine di preferenza: il nome attuale e poi i nomi precedenti dell'app. Chi ha già dati in una cartella
+  // precedente continua a usarla (una cartella vuota, es. creata da Electron, non conta).
+  let candidate;
   if (process.platform === 'win32') {
     const base = env.APPDATA || path.join(env.USERPROFILE || os.homedir(), 'AppData', 'Roaming');
-    const nuova = path.join(base, 'Tarvio'), vecchia = path.join(base, 'Assistente Personale');
-    // chi usava già la versione con il vecchio nome non perde i dati: se esiste solo la vecchia cartella si usa quella
-    return !haDati(nuova) && haDati(vecchia) ? vecchia : nuova;
+    candidate = ['Kyklion', 'Tarvio', 'Assistente Personale'].map(n => path.join(base, n));
+  } else {
+    const casa = env.HOME || os.homedir();
+    candidate = ['.kyklion', '.tarvio', '.assistente-personale'].map(n => path.join(casa, n));
   }
-  const casa = env.HOME || os.homedir();
-  const nuova = path.join(casa, '.tarvio'), vecchia = path.join(casa, '.assistente-personale');
-  return !haDati(nuova) && haDati(vecchia) ? vecchia : nuova;
+  return candidate.find(haDati) || candidate[0];
 }
 
 function dormi(ms) {

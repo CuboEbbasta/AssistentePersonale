@@ -63,7 +63,7 @@ test('token giusto: initialize, ping, tools/list con i 4 strumenti', async () =>
   try {
     const i = JSON.parse((await rpc(t.porta, t.token, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).testo);
     assert.strictEqual(i.result.protocolVersion, '2025-06-18');
-    assert.strictEqual(i.result.serverInfo.name, 'tarvio');
+    assert.strictEqual(i.result.serverInfo.name, 'kyklion');
     const p = JSON.parse((await rpc(t.porta, t.token, { jsonrpc: '2.0', id: 2, method: 'ping' })).testo);
     assert.deepStrictEqual(p.result, {});
     const l = JSON.parse((await rpc(t.porta, t.token, { jsonrpc: '2.0', id: 3, method: 'tools/list' })).testo);

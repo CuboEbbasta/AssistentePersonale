@@ -67,7 +67,7 @@ const UiImpostazioni = (function () {
 
       <div class="card card-flat">
         <div class="elemento-meta">
-          Tarvio — versione dati ${Dati.stato().versione}.<br>
+          Kyklion — versione dati ${Dati.stato().versione}.<br>
           Moduli attuali: routine (con tipo/descrizione), task con cascata temporale e cartelle,
           orario fisso, obiettivi (1 mese → 10 anni, con tappe/timeline),
           diario serale, dieta (profilo, target, piano settimanale, log pasti),

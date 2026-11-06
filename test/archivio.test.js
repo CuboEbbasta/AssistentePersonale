@@ -238,19 +238,22 @@ test('uno stato.json valido non genera file corrotti', (t) => {
   assert.ok(!fs.readdirSync(d).some(n => n.startsWith('stato.corrotto-')));
 });
 
-test('percorsoDati: cartella «Tarvio»; se esiste solo la vecchia «Assistente Personale» si continua a usare quella (nessun dato perso)', () => {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'tarvio-base-'));
+test('percorsoDati: cartella «Kyklion»; i dati nelle cartelle dei nomi precedenti (Tarvio, Assistente Personale) non vanno persi', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'kyklion-base-'));
   const env = { APPDATA: base, USERPROFILE: base, HOME: base };
-  const nuova = path.join(base, 'Tarvio'), vecchia = path.join(base, 'Assistente Personale');
+  const kyklion = path.join(base, 'Kyklion'), tarvio = path.join(base, 'Tarvio'), vecchia = path.join(base, 'Assistente Personale');
   if (process.platform === 'win32') {
-    assert.strictEqual(percorsoDati(env), nuova);           // nessuna delle due: la nuova
+    assert.strictEqual(percorsoDati(env), kyklion);          // nessuna cartella: quella nuova
     fs.mkdirSync(vecchia); fs.writeFileSync(path.join(vecchia, 'ia-config.json'), '{}');
-    assert.strictEqual(percorsoDati(env), vecchia);         // dati solo nella vecchia: resta la vecchia
-    fs.mkdirSync(nuova);                                    // una cartella «Tarvio» vuota (es. creata da Electron) non nasconde i dati vecchi
-    assert.strictEqual(percorsoDati(env), vecchia);
-    fs.writeFileSync(path.join(nuova, 'stato.json'), '{}');
-    assert.strictEqual(percorsoDati(env), nuova);           // dati anche nella nuova: vince la nuova
+    assert.strictEqual(percorsoDati(env), vecchia);          // dati solo nella più vecchia: resta quella
+    fs.mkdirSync(tarvio); fs.writeFileSync(path.join(tarvio, 'stato.json'), '{}');
+    assert.strictEqual(percorsoDati(env), tarvio);           // dati anche in «Tarvio»: vince su quella più vecchia
+    fs.mkdirSync(kyklion);                                   // cartella «Kyklion» vuota (es. creata da Electron): non nasconde i dati
+    assert.strictEqual(percorsoDati(env), tarvio);
+    fs.writeFileSync(path.join(kyklion, 'proposte.json'), '[]');
+    assert.strictEqual(percorsoDati(env), kyklion);          // dati nella nuova: vince la nuova
   }
-  assert.strictEqual(percorsoDati({ TARVIO_DATI: '/a', ASSISTENTE_DATI: '/b' }), '/a');
+  assert.strictEqual(percorsoDati({ KYKLION_DATI: '/k', TARVIO_DATI: '/t', ASSISTENTE_DATI: '/a' }), '/k');
+  assert.strictEqual(percorsoDati({ TARVIO_DATI: '/t', ASSISTENTE_DATI: '/a' }), '/t');
   fs.rmSync(base, { recursive: true, force: true });
 });

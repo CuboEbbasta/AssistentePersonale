@@ -1,7 +1,7 @@
 {
-  "name": "tarvio-desktop",
+  "name": "kyklion-desktop",
   "version": "1.0.0",
-  "description": "Tarvio — versione PC (Electron)",
+  "description": "Kyklion — versione PC (Electron)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,8 +12,8 @@
     "electron-builder": "^25.0.0"
   },
   "build": {
-    "appId": "app.tarvio.desktop",
-    "productName": "Tarvio",
+    "appId": "app.kyklion.desktop",
+    "productName": "Kyklion",
     "files": [
       "main.js",
       "preload.js",

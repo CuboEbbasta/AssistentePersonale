@@ -1007,7 +1007,7 @@ async function testAccessoIA() {
   const chk = doc.getElementById('chk-accesso-ia');
   assert(chk && !chk.checked, "l'interruttore parte spento");
   assert(!doc.getElementById('btn-accesso-crea'), 'da spento non si può creare un collegamento');
-  assert(/Consenti a un'IA di usare Tarvio/.test(sez.textContent), 'etichetta interruttore');
+  assert(/Consenti a un'IA di usare Kyklion/.test(sez.textContent), 'etichetta interruttore');
   assert(/PROPORRE/.test(sez.textContent) && /127\.0\.0\.1/.test(sez.textContent) && /Proposte IA/.test(sez.textContent), 'spiegazione');
 
   // accende

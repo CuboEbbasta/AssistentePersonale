@@ -34,7 +34,7 @@ function rispondiRpc(msg, client, archivio) {
     let res;
     switch (msg.method) {
       case 'initialize':
-        res = { protocolVersion: PROTOCOLLO, capabilities: { tools: {} }, serverInfo: { name: 'tarvio', version: '1.0.0' } };
+        res = { protocolVersion: PROTOCOLLO, capabilities: { tools: {} }, serverInfo: { name: 'kyklion', version: '1.0.0' } };
         break;
       case 'ping':
         res = {};

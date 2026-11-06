@@ -1,4 +1,4 @@
-# Tarvio
+# Kyklion
 
 App di produttività personale completa: routine e task, dieta, workout,
 obiettivi, diario, panoramica mese/anno/storico, e un assistente IA
@@ -69,7 +69,7 @@ telefono via IP di rete locale quando siete sulla stessa WiFi.
    qui — un buon compromesso tra qualità e requisiti hardware; se hai una
    scheda video potente puoi provare un modello più grande, es.
    `qwen3:30b`, altrimenti uno più leggero come `llama3.2:3b`)
-3. In Tarvio → Altro → Assistente IA: abilita, lascia
+3. In Kyklion → Altro → Assistente IA: abilita, lascia
    "http://localhost:11434" come indirizzo, scrivi il nome del modello
    scelto, "Verifica connessione".
 
@@ -236,7 +236,7 @@ sull'uso reale:
 
 ## Struttura del progetto
 ```
-tarvio/
+kyklion/
   www/                  interfaccia + logica (usata sia da Android che da PC)
   android/              progetto nativo Android (generato da Capacitor)
   desktop/              wrapper Electron per PC (+ ponte IPC per l'IA)

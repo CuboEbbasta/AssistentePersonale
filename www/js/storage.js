@@ -39,7 +39,7 @@ const Dati = (function () {
     else console.warn(testo);
   }
 
-  const DOVE_BACKUP = "La copia dei dati precedenti è in stato.import-backup.json, nella cartella dati di Tarvio (%APPDATA%\\Tarvio, o la cartella indicata da ASSISTENTE_DATI).";
+  const DOVE_BACKUP = "La copia dei dati precedenti è in stato.import-backup.json, nella cartella dati di Kyklion (%APPDATA%\\Kyklion, o la cartella indicata da ASSISTENTE_DATI).";
 
   function blocca(testo) {
     salvataggioBloccato = true;
@@ -336,7 +336,7 @@ const Dati = (function () {
       if (Share) {
         try {
           await Share.share({
-            title: 'Backup Tarvio',
+            title: 'Backup Kyklion',
             text: 'Backup dei dati dell\'app',
             url: scrittura.uri
           });

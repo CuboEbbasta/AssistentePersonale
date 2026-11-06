@@ -8,7 +8,7 @@ finché non la approvi tu.
 
 Nell'app desktop vai in **Altro → Impostazioni → Accesso IA esterna**:
 
-1. Accendi **Consenti a un'IA di usare Tarvio**. Il server parte subito (e riparte da solo a ogni avvio dell'app finché l'interruttore resta acceso).
+1. Accendi **Consenti a un'IA di usare Kyklion**. Il server parte subito (e riparte da solo a ogni avvio dell'app finché l'interruttore resta acceso).
 2. In **Nuovo collegamento** scrivi un nome (minuscole, numeri, trattini), scegli le sezioni che l'IA può leggere e premi **Crea collegamento**.
 3. Si apre un foglio con il **token**, mostrato **una sola volta**, e due blocchi già pronti: il comando per **Claude Code** (`claude mcp add --transport http ...`) e la configurazione per **Hermes** e altri client MCP. Premi **Copia** e incollali nell'IA. Chiuso il foglio il token non si rivede più: se lo perdi, rimuovi il collegamento e creane uno nuovo.
 4. Per revocare l'accesso a un'IA, premi **Rimuovi** accanto al suo collegamento: smette di funzionare subito, senza riavviare nulla.
@@ -66,7 +66,7 @@ rimuovi i collegamenti che non usi (**Rimuovi** nelle Impostazioni). Con un'IA l
 ## Dove stanno i file
 
 Cartella dati (o quella indicata da `ASSISTENTE_DATI`): su Windows
-`%APPDATA%\Tarvio`, altrove `~/.tarvio`. Contiene
+`%APPDATA%\Kyklion`, altrove `~/.kyklion`. Contiene
 `stato.json` (+ `stato.bak.json`), `proposte.json` e `ia-config.json` (client con
 solo l'hash del token, mai il token).
 

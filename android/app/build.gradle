@@ -4,7 +4,7 @@ android {
     namespace = "com.assistente.personale"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "app.tarvio"
+        applicationId "app.kyklion"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
