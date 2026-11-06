@@ -13,9 +13,10 @@ const fs = require('fs');
 const { creaArchivio, percorsoDati } = require('../ia/archivio.js');
 const { creaGestoriDati } = require('../ia/ipc.js');
 
-// Stessa cartella dati dell'app e della CLI ap-ia: va impostata PRIMA di whenReady.
+// Cartella dati (stato.json, proposte.json, ia-config.json): percorsoDati(), la stessa del CLI ap-ia.
+// NON si cambia 'userData' di Electron: e' il profilo di Chromium e contiene il vecchio localStorage (Preferences).
 const CARTELLA_DATI = percorsoDati();
-app.setPath('userData', CARTELLA_DATI);
+fs.mkdirSync(CARTELLA_DATI, { recursive: true });
 const gestoriDati = creaGestoriDati(creaArchivio(CARTELLA_DATI));
 
 function creaFinestra() {
@@ -43,7 +44,18 @@ function creaFinestra() {
   return win;
 }
 
+// Una sola istanza: due app sullo stesso stato.json si sovrascriverebbero a vicenda.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [w] = BrowserWindow.getAllWindows();
+    if (w) { if (w.isMinimized()) w.restore(); w.focus(); }
+  });
+}
+
 app.whenReady().then(() => {
+  if (!app.hasSingleInstanceLock()) return;
   Menu.setApplicationMenu(null);
   creaFinestra();
 

@@ -175,4 +175,4 @@ function creaArchivio(dir) {
   };
 }
 
-module.exports = { percorsoDati, ErroreArchivio, creaArchivio };
+module.exports = { percorsoDati, ErroreArchivio, creaArchivio, scriviAtomico };

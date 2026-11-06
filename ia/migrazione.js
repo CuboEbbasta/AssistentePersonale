@@ -6,6 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const Schema = require('../www/js/core/schema.js');
+const { scriviAtomico } = require('./archivio.js');
 
 function migraDaPreferences(archivio, valoreGrezzo) {
   if (fs.existsSync(path.join(archivio.dir, 'stato.json'))) return 'gia_presente';
@@ -16,7 +17,7 @@ function migraDaPreferences(archivio, valoreGrezzo) {
   }
   fs.mkdirSync(archivio.dir, { recursive: true });
   // copia originale prima, poi lo stato migrato (se la scrittura fallisce resta la copia)
-  fs.writeFileSync(path.join(archivio.dir, 'stato.import-backup.json'), valoreGrezzo);
+  scriviAtomico(path.join(archivio.dir, 'stato.import-backup.json'), valoreGrezzo);
   archivio.scriviStato(Schema.migra(parsed));
   return 'importato';
 }

@@ -35,8 +35,16 @@ const Dati = (function () {
   let salvataggioBloccato = false;
 
   function avvisa(testo) {
-    if (window.App && window.App.mostraToast) window.App.mostraToast(testo, 6000);
+    if (window.App && window.App.mostraToast) window.App.mostraToast(testo, 8000);
     else console.warn(testo);
+  }
+
+  const DOVE_BACKUP = "La copia dei dati precedenti è in stato.import-backup.json, nella cartella dati di Assistente Personale (%APPDATA%\\Assistente Personale, o la cartella indicata da ASSISTENTE_DATI).";
+
+  function blocca(testo) {
+    salvataggioBloccato = true;
+    avvisa(testo);
+    return statoDefault();
   }
 
   async function caricaDaFile(api) {
@@ -44,24 +52,25 @@ const Dati = (function () {
     if (r && r.ok && r.json === null) {
       // primo avvio con il file: importa i dati dal vecchio salvataggio (Preferences), se ci sono
       const { Preferences } = plugins();
-      const vecchio = Preferences ? await Preferences.get({ key: CHIAVE }) : null;
-      const m = await api.statoMigra((vecchio && vecchio.value) || null);
-      if (m && m.ok && m.esito === 'importato') {
-        avvisa('Dati importati dal vecchio salvataggio nel nuovo file.');
-        r = await api.statoLeggi();
-      } else if (!m || !m.ok) {
-        salvataggioBloccato = true;
-        avvisa('Impossibile importare i dati precedenti: salvataggio sospeso per non perderli.');
-        return statoDefault();
+      if (!Preferences) {
+        return blocca("Non trovo il vecchio salvataggio (Preferences): salvataggio sospeso per non perdere i dati. Riavvia l'app.");
       }
+      let vecchio;
+      try { vecchio = await Preferences.get({ key: CHIAVE }); } catch (e) {
+        return blocca("Non riesco a leggere il vecchio salvataggio: salvataggio sospeso per non perdere i dati. Riavvia l'app.");
+      }
+      const m = await api.statoMigra((vecchio && vecchio.value) || null);
+      if (!m || !m.ok) {
+        return blocca('Impossibile importare i dati precedenti (valore danneggiato o errore): salvataggio sospeso per non perderli. ' + DOVE_BACKUP);
+      }
+      if (m.esito === 'importato') avvisa('Dati importati dal vecchio salvataggio nel nuovo file. ' + DOVE_BACKUP);
+      if (m.esito === 'importato' || m.esito === 'gia_presente') r = await api.statoLeggi();
     }
     if (r && r.ok) {
       if (r.daBackup) avvisa("Il file dei dati era danneggiato: ripristinata l'ultima copia di sicurezza.");
       return r.json === null ? statoDefault() : JSON.parse(r.json);
     }
-    salvataggioBloccato = true;
-    avvisa("Il file dei dati non è leggibile e non c'è una copia di sicurezza: salvataggio sospeso, i dati non vengono toccati.");
-    return statoDefault();
+    return blocca("Il file dei dati non è leggibile e non c'è una copia di sicurezza: salvataggio sospeso, i dati non vengono toccati.");
   }
 
   async function carica() {
@@ -83,7 +92,29 @@ const Dati = (function () {
     return statoCorrente;
   }
 
+  let avvisoSalvataggioMostrato = false;
+  let ritentoInCorso = false;
+  const ATTESA_RITENTO_MS = 2000;
+
   async function salva() {
+    const ok = await salvaUnaVolta();
+    if (!ok && apiFile()) {
+      if (!avvisoSalvataggioMostrato) {
+        avvisoSalvataggioMostrato = true;
+        avvisa("Non riesco a salvare i dati: non chiudere l'app e riprova tra poco. Le ultime modifiche potrebbero andare perse.");
+      }
+      if (!ritentoInCorso && !salvataggioBloccato) {
+        ritentoInCorso = true;
+        setTimeout(async () => {
+          ritentoInCorso = false;
+          await salvaUnaVolta();
+        }, ATTESA_RITENTO_MS);
+      }
+    }
+    return ok;
+  }
+
+  async function salvaUnaVolta() {
     try {
       const api = apiFile();
       if (api) {
