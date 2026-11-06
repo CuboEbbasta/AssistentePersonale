@@ -31,7 +31,8 @@ async function cdp() {
   ws.addEventListener('message', m => { const j = JSON.parse(m.data); if (j.id && att.has(j.id)) { att.get(j.id)(j); att.delete(j.id); } });
   const invia = (method, params = {}) => new Promise(r => { const i = ++id; att.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
   const ev = async (js) => { const r = await invia('Runtime.evaluate', { expression: js, awaitPromise: true, returnByValue: true }); if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails.exception || r.result.exceptionDetails)); return r.result.result.value; };
-  const foto = async (nome) => { const r = await invia('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(SCR, nome), Buffer.from(r.result.data, 'base64')); };
+  // lo screenshot può restare appeso se la finestra è coperta/minimizzata: dopo 8 s si prosegue senza
+  const foto = async (nome) => { const r = await Promise.race([invia('Page.captureScreenshot', { format: 'png' }), attendi(8000).then(() => null)]); if (r && r.result && r.result.data) fs.writeFileSync(path.join(SCR, nome), Buffer.from(r.result.data, 'base64')); };
   return { ev, foto, chiudi: () => ws.close() };
 }
 function avvia() { return spawn(ELECTRON, [path.join(REPO, 'desktop'), `--remote-debugging-port=${PORTA_CDP}`, `--user-data-dir=${PROFILO}`], { env, stdio: 'ignore' }); }
@@ -40,16 +41,17 @@ async function ferma(p) { try { execFileSync('taskkill', ['/PID', String(p.pid),
 (async () => {
   console.log('Cartella dati:', DATI);
   const tok = cli('client', 'add', 'prova').trim().split(/\r?\n/).pop(); cli('abilita');
-  const srv = spawn('node', [path.join(REPO, 'ia/bin/ap-ia.js'), 'serve'], { env, stdio: 'ignore' }); await attendi(1500);
+  // il server MCP parte insieme all'app (accesso IA abilitato): non si lancia 'ap-ia serve' a parte
   let app = avvia(); let c = await cdp(); await attendi(2500);
 
   ok('app caricata', await c.ev('typeof Dati !== "undefined" && !!Dati.stato()'));
+  ok('il server MCP parte insieme all app (/salute)', await get(`http://127.0.0.1:${PORTA_MCP}/salute`).then(t => t === 'ok').catch(() => false));
   ok('electronAPI.dati presente', await c.ev('!!(window.electronAPI && window.electronAPI.dati)'));
   ok('primo avvio: mostra la presentazione (onboarding)', await c.ev('Dati.stato().impostazioni.onboardingCompletato === false'));
   await c.foto('00-onboarding.png');
   // salto la presentazione (come farebbe l'utente) e ricarico
   await c.ev('(async () => { Dati.stato().impostazioni.onboardingCompletato = true; return await Dati.salva(); })()');
-  await c.ev('location.reload()'); await attendi(3000);
+  await c.ev('setTimeout(() => location.reload(), 50)'); await attendi(3500); // reload differito: la risposta CDP non va persa
   const disp = await c.ev('getComputedStyle(document.getElementById("badge-altro")).display');
   ok('badge "0" su Altro NON visibile', disp === 'none', 'display=' + disp);
   await c.foto('01-avvio.png');
@@ -101,13 +103,37 @@ async function ferma(p) { try { execFileSync('taskkill', ['/PID', String(p.pid),
   await c.ev('document.querySelector(\'.tab-btn[data-tab="altro"]\').click()'); await attendi(300);
   await c.ev('(document.querySelector(\'[data-figlio="proposte"]\')||{click(){}}).click()'); await attendi(600); await c.foto('04-vuota.png');
 
+  // assistente integrato: scelta di server e modello con un Ollama VERO (se è acceso)
+  const ollamaAcceso = await get('http://localhost:11434/api/tags').then(() => true).catch(() => false);
+  if (ollamaAcceso) {
+    await c.ev('document.querySelector(\'.tab-btn[data-tab="altro"]\').click()'); await attendi(300);
+    await c.ev('[...document.querySelectorAll("[data-figlio]")].find(b => /Assistente IA/.test(b.textContent)).click()'); await attendi(600);
+    await c.ev('document.getElementById("btn-ia-on").click()'); await attendi(500);
+    ok('tipo server: Ollama di default, campo chiave nascosto', await c.ev('document.getElementById("f-ia-tipo").value === "ollama" && getComputedStyle(document.getElementById("campo-ia-chiave")).display === "none"'));
+    await c.ev('document.getElementById("btn-ia-test").click()'); await attendi(3000);
+    const modelli = await c.ev('[...document.getElementById("f-ia-modello").options].map(o => o.value)');
+    ok('«Verifica connessione» riempie il menu dei modelli', modelli.length > 1, modelli.length + ' voci');
+    const scelto = modelli.find(m => /qwen3:8b/.test(m)) || modelli.find(m => m && !/^__/.test(m));
+    await c.ev(`(() => { const s = document.getElementById("f-ia-modello"); s.value = ${JSON.stringify(scelto)}; s.dispatchEvent(new Event("change")); })()`);
+    await c.ev('document.getElementById("btn-ia-salva").click()'); await attendi(800);
+    ok('modello scelto salvato nelle impostazioni', await c.ev(`Dati.stato().impostazioniIA.modello === ${JSON.stringify(scelto)}`), scelto);
+    await c.ev('(() => { const t = document.getElementById("f-ia-tipo"); t.value = "openai"; t.dispatchEvent(new Event("change")); })()'); await attendi(300);
+    ok('tipo «compatibile OpenAI»: compare il campo chiave', await c.ev('getComputedStyle(document.getElementById("campo-ia-chiave")).display !== "none"'));
+    await c.foto('05-modello.png');
+    await c.ev('(() => { const t = document.getElementById("f-ia-tipo"); t.value = "ollama"; t.dispatchEvent(new Event("change")); })()');
+    const gen = await c.ev('(async () => { const r = await ClienteIA.chiamaOllama("Rispondi solo con la parola: ok", ""); return { ok: r.ok, testo: (r.testo || r.errore || "").slice(0, 80) }; })()');
+    ok('generazione con il modello scelto (Ollama vero)', gen.ok, gen.testo.replace(/\s+/g, ' '));
+  } else {
+    console.log('   (Ollama non acceso su localhost:11434: salto la prova della scelta del modello)');
+  }
+
   // sicurezza server
   const tokenErrato = await mcp('x'.repeat(64), 'ap_oggi', {});
   ok('token errato rifiutato (401)', tokenErrato.stato === 401);
   const leggiDiario = await mcp(tok, 'ap_leggi', { sezione: 'diario' });
   ok('sezione non permessa (diario) rifiutata', /errore|permess|non/i.test(leggiDiario.corpo) && !/journal/.test(leggiDiario.corpo), leggiDiario.corpo.slice(0, 100));
 
-  c.chiudi(); await ferma(app); await ferma(srv);
+  c.chiudi(); await ferma(app);
   const falliti = esiti.filter(e => !e[1]);
   console.log(`\n${esiti.length - falliti.length}/${esiti.length} controlli passati`);
   process.exit(falliti.length ? 1 : 0);

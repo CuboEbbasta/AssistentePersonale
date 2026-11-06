@@ -13,6 +13,7 @@ const fs = require('fs');
 const { creaArchivio, percorsoDati } = require('../ia/archivio.js');
 const { creaGestoriDati } = require('../ia/ipc.js');
 const { creaGestoriIA } = require('../ia/ipc-ia.js');
+const { avviaServerMcp } = require('../ia/mcp-http.js');
 
 // Cartella dati (stato.json, proposte.json, ia-config.json): percorsoDati(), la stessa del CLI ap-ia.
 // NON si cambia 'userData' di Electron: e' il profilo di Chromium e contiene il vecchio localStorage (Preferences).
@@ -56,15 +57,33 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
+let serverMcp = null;
+
+/** Se l'accesso IA è abilitato (ap-ia abilita), il server MCP parte con l'app: solo 127.0.0.1, token obbligatorio. */
+async function avviaAccessoIA() {
+  try {
+    const archivio = creaArchivio(CARTELLA_DATI);
+    const cfg = archivio.leggiConfig();
+    if (!cfg || cfg.abilitato !== true) return;
+    serverMcp = await avviaServerMcp({ archivio, porta: cfg.porta });
+    console.log('Accesso IA attivo su 127.0.0.1:' + cfg.porta);
+  } catch (e) {
+    console.warn(e && e.code === 'EADDRINUSE' ? 'Accesso IA: porta occupata (forse ap-ia serve è già in esecuzione).' : 'Accesso IA non avviato.');
+  }
+}
+
 app.whenReady().then(() => {
   if (!app.hasSingleInstanceLock()) return;
   Menu.setApplicationMenu(null);
   creaFinestra();
+  avviaAccessoIA();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) creaFinestra();
   });
 });
+
+app.on('before-quit', () => { if (serverMcp) { try { serverMcp.close(); } catch (_) { /* ignora */ } } });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
