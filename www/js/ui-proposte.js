@@ -116,11 +116,8 @@ const UIProposte = (function () {
       const guida = el('div', 'card');
       [
         'Qui compaiono le modifiche che un\'IA esterna propone ai tuoi dati. Nulla cambia finche\' non premi Applica.',
-        'Per collegare un\'IA, da un terminale nella cartella del progetto:',
-        '1) node ia/bin/ap-ia.js client add nome-ia   (stampa il token, una volta sola)',
-        '2) node ia/bin/ap-ia.js abilita',
-        '3) node ia/bin/ap-ia.js serve   (lascialo aperto)',
-        'Poi l\'IA usa http://127.0.0.1:3040/mcp con il token. Dettagli in docs/ia-esterna.md.'
+        'Per collegare un\'IA vai in Altro → Impostazioni → Accesso IA esterna: accendi l\'interruttore e crea un collegamento. Ti verranno mostrati il token e le istruzioni da copiare nell\'IA.',
+        'L\'IA può leggere solo le sezioni che scegli e proporre modifiche: le vedrai qui. Dettagli in docs/ia-esterna.md.'
       ].forEach(t => guida.appendChild(el('div', 'timeline-meta', t)));
       contenitore.appendChild(guida);
       return;

@@ -56,6 +56,8 @@ const UiImpostazioni = (function () {
         <div id="lista-tipi"></div>
       </div>
 
+      <div id="accesso-ia-contenitore"></div>
+
       <div class="card">
         <h3>Dati</h3>
         <div class="riga-btn">
@@ -78,6 +80,8 @@ const UiImpostazioni = (function () {
     `;
 
     renderListaTipi();
+    // solo versione desktop: senza electronAPI il contenitore resta vuoto
+    if (UiAccessoIA.disponibile()) UiAccessoIA.render(document.getElementById('accesso-ia-contenitore'));
 
     document.getElementById('btn-tema-chiaro').addEventListener('click', () => impostaTema('chiaro'));
     document.getElementById('btn-tema-scuro').addEventListener('click', () => impostaTema('scuro'));

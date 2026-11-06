@@ -785,6 +785,7 @@ async function main() {
   window.close();
 
   await testProposte();
+  await testAccessoIA();
 
   if (errori.length) {
     console.log('\n❌ TROVATI PROBLEMI:\n' + errori.map(e => ' - ' + e).join('\n'));
@@ -953,6 +954,154 @@ async function testProposte() {
   w.dispatchEvent(new w.Event('focus'));
   await attendi(200);
   assert(vista.querySelector('[data-proposta="' + nuova.id + '"]'), 'al focus della finestra l\'elenco deve aggiornarsi');
+  w.close();
+}
+
+// ---------------------------------------------------------------------------
+// «Accesso IA esterna» in Impostazioni (solo desktop: richiede electronAPI.dati + electronAPI.accesso)
+// ---------------------------------------------------------------------------
+async function testAccessoIA() {
+  const assert = (cond, msg) => { if (!cond) errori.push('ASSERT FALLITO (accesso IA): ' + msg); };
+  const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+  const Schema = require('./www/js/core/schema.js');
+  const base = Schema.statoDefault();
+  base.impostazioni.onboardingCompletato = true;
+  const apriImpostazioni = async (w) => {
+    w.App.mostraTab('altro');
+    await attendi(100);
+    const pill = w.document.querySelector('#subnav-panoramica [data-figlio="impostazioni"]');
+    pill.dispatchEvent(new w.Event('click', { bubbles: true }));
+    await attendi(250);
+  };
+
+  // senza electronAPI: la sezione non compare
+  const wSenza = await caricaAppConApi(null);
+  await apriImpostazioni(wSenza);
+  assert(!wSenza.document.querySelector('[data-accesso-ia]'), 'senza electronAPI la sezione "Accesso IA esterna" non deve comparire');
+  assert(!/Accesso IA esterna/.test(wSenza.document.getElementById('view-impostazioni-corpo').textContent), 'senza electronAPI nessun testo della sezione');
+  wSenza.close();
+
+  // con electronAPI finto e con stato
+  const TOKEN = 'ab'.repeat(32);
+  const cfg = { abilitato: false, porta: 3040, client: [{ nome: '<img src=x onerror="window.__xss=1">', sezioni: ['agenda'] }] };
+  const chiamate = [];
+  const accesso = {
+    leggi: async () => ({ ok: true, abilitato: cfg.abilitato, porta: cfg.porta, avviato: cfg.abilitato, client: cfg.client.map(c => ({ nome: c.nome, sezioni: c.sezioni.slice() })) }),
+    abilita: async (on) => { chiamate.push(['abilita', on]); cfg.abilitato = on; return { ok: true, abilitato: on, avviato: on }; },
+    creaClient: async (nome, sezioni) => { chiamate.push(['crea', nome, sezioni.slice()]); cfg.client.push({ nome, sezioni }); return { ok: true, token: TOKEN }; },
+    rimuoviClient: async (nome) => { chiamate.push(['rimuovi', nome]); cfg.client = cfg.client.filter(c => c.nome !== nome); return { ok: true }; }
+  };
+  const dati = {
+    statoLeggi: async () => ({ ok: true, json: JSON.stringify(base), daBackup: false }),
+    statoScrivi: async () => ({ ok: true }),
+    statoMigra: async () => ({ ok: true, esito: 'gia_presente' }),
+    proposteElenca: async () => ({ ok: true, proposte: [] }),
+    proposteAggiorna: async () => ({ ok: true })
+  };
+  const w = await caricaAppConApi({ dati, accesso });
+  w.confirm = () => true;
+  const doc = w.document;
+  await apriImpostazioni(w);
+  const sez = doc.querySelector('[data-accesso-ia]');
+  assert(sez, 'con electronAPI la sezione "Accesso IA esterna" deve comparire');
+  const chk = doc.getElementById('chk-accesso-ia');
+  assert(chk && !chk.checked, "l'interruttore parte spento");
+  assert(!doc.getElementById('btn-accesso-crea'), 'da spento non si può creare un collegamento');
+  assert(/Consenti a un'IA di usare Tarvio/.test(sez.textContent), 'etichetta interruttore');
+  assert(/PROPORRE/.test(sez.textContent) && /127\.0\.0\.1/.test(sez.textContent) && /Proposte IA/.test(sez.textContent), 'spiegazione');
+
+  // accende
+  chk.checked = true;
+  chk.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await attendi(250);
+  assert(chiamate.some(c => c[0] === 'abilita' && c[1] === true), 'abilita(true) chiamato');
+  assert(doc.getElementById('btn-accesso-crea'), "acceso: compare il form 'Nuovo collegamento'");
+
+  // elenco: testo malevolo come testo
+  const elenco = doc.getElementById('accesso-ia-elenco');
+  assert(elenco && elenco.querySelectorAll('[data-client]').length === 1, 'un collegamento in elenco');
+  assert(elenco.textContent.includes('<img src=x onerror="window.__xss=1">'), 'il nome malevolo è mostrato come testo');
+  assert(doc.querySelectorAll('#view-impostazioni-corpo img').length === 0 && w.__xss === undefined, 'nessun elemento img iniettato dal nome del client');
+  assert(!/tokenHash/.test(sez.textContent), 'nessun tokenHash');
+
+  // caselle: agenda e obiettivi preselezionate, le sensibili no
+  const caselle = {};
+  doc.querySelectorAll('.chk-sezione-accesso').forEach(c => { caselle[c.value] = c.checked; });
+  assert(caselle.agenda === true && caselle.obiettivi === true, 'agenda e obiettivi preselezionate');
+  assert(['diario', 'dieta', 'workout', 'sonno'].every(k => caselle[k] === false), 'sezioni sensibili spente di default');
+  assert(!('salute' in caselle), 'nessuna sezione "salute" inesistente');
+  assert(doc.querySelectorAll('#accesso-ia-nuovo .badge-warn').length === 4, 'le 4 sezioni sensibili sono marcate');
+  assert(/internet|cloud/.test(doc.getElementById('accesso-ia-nuovo').textContent), 'avviso per IA su internet/cloud');
+
+  // nome non valido: nessuna chiamata
+  const prima = chiamate.length;
+  doc.getElementById('f-accesso-nome').value = 'Nome Sbagliato';
+  doc.getElementById('btn-accesso-crea').click();
+  await attendi(100);
+  assert(chiamate.length === prima && doc.getElementById('accesso-ia-errore').textContent.length > 0, 'nome non valido: errore locale e nessuna chiamata');
+
+  // crea con una sezione sensibile esplicita
+  doc.getElementById('f-accesso-nome').value = 'prova';
+  [...doc.querySelectorAll('.chk-sezione-accesso')].find(c => c.value === 'sonno').checked = true;
+  doc.getElementById('btn-accesso-crea').click();
+  await attendi(300);
+  const crea = chiamate.find(c => c[0] === 'crea');
+  assert(crea && crea[1] === 'prova' && JSON.stringify(crea[2].slice().sort()) === JSON.stringify(['agenda', 'obiettivi', 'sonno']), 'creaClient con nome e sezioni scelte (' + JSON.stringify(crea) + ')');
+
+  // il token appare UNA volta nel foglio, con URL e intestazione
+  const foglio = doc.getElementById('foglio-contenuto');
+  assert(doc.getElementById('overlay-foglio').classList.contains('attivo'), 'il foglio con il token si apre');
+  assert(foglio.textContent.includes(TOKEN), 'il token è mostrato');
+  assert(foglio.textContent.includes('http://127.0.0.1:3040/mcp') && foglio.textContent.includes('Authorization') && foglio.textContent.includes('Bearer ' + TOKEN), 'URL e intestazione Authorization');
+  assert(/claude mcp add/.test(foglio.textContent), 'blocco per Claude Code');
+  assert(/non lo vedrai più/.test(foglio.textContent), 'avviso: il token non si rivede');
+  assert(foglio.querySelectorAll('[data-copia]').length >= 3, 'pulsanti Copia');
+  assert(!doc.getElementById('view-impostazioni-corpo').textContent.includes(TOKEN), 'il token non è nella pagina Impostazioni');
+
+  // chiusura con il pulsante: il token sparisce dal DOM
+  doc.getElementById('btn-accesso-chiudi').click();
+  await attendi(100);
+  assert(!doc.body.innerHTML.includes(TOKEN), 'dopo la chiusura il token non è più nel DOM');
+  assert(!doc.getElementById('overlay-foglio').classList.contains('attivo'), 'foglio chiuso');
+
+  // chiusura con clic fuori dal foglio: sparisce comunque
+  doc.getElementById('f-accesso-nome').value = 'seconda';
+  doc.getElementById('btn-accesso-crea').click();
+  await attendi(300);
+  assert(doc.getElementById('foglio-contenuto').textContent.includes(TOKEN), 'secondo token mostrato');
+  doc.getElementById('overlay-foglio').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await attendi(100);
+  assert(!doc.body.innerHTML.includes(TOKEN), 'chiusura con clic fuori: il token non resta nel DOM');
+
+  // rimuovi
+  const btnRim = doc.querySelector('[data-client="prova"] [data-azione="rimuovi"]');
+  assert(btnRim, 'pulsante Rimuovi per il collegamento');
+  btnRim.click();
+  await attendi(250);
+  assert(chiamate.some(c => c[0] === 'rimuovi' && c[1] === 'prova'), 'rimuoviClient("prova") chiamato');
+  assert(!doc.querySelector('[data-client="prova"]'), 'il collegamento rimosso sparisce dall\'elenco');
+
+  // spegne
+  doc.getElementById('chk-accesso-ia').checked = false;
+  doc.getElementById('chk-accesso-ia').dispatchEvent(new w.Event('change', { bubbles: true }));
+  await attendi(250);
+  assert(chiamate.some(c => c[0] === 'abilita' && c[1] === false), 'abilita(false) chiamato');
+  assert(!doc.getElementById('btn-accesso-crea'), 'da spento il form sparisce');
+
+  // errore (porta occupata) riportato e interruttore ripristinato
+  accesso.abilita = async () => ({ ok: false, codice: 'PORTA_OCCUPATA', errore: 'La porta 3040 è già usata da un altro programma. Chiudilo e riprova.' });
+  doc.getElementById('chk-accesso-ia').checked = true;
+  doc.getElementById('chk-accesso-ia').dispatchEvent(new w.Event('change', { bubbles: true }));
+  await attendi(250);
+  assert(!doc.getElementById('chk-accesso-ia').checked, 'se abilita fallisce l\'interruttore torna spento');
+  assert(/già usata/.test(doc.getElementById('toast').textContent), 'errore mostrato');
+
+  // schermata Proposte vuota: la guida rimanda alle Impostazioni
+  w.App.mostraTab('altro');
+  doc.querySelector('#subnav-panoramica [data-figlio="proposte"]').dispatchEvent(new w.Event('click', { bubbles: true }));
+  await attendi(250);
+  const vp = doc.getElementById('view-proposte').textContent;
+  assert(/Impostazioni → Accesso IA esterna/.test(vp) && !/ap-ia\.js/.test(vp), 'la guida delle Proposte vuote rimanda a Impostazioni → Accesso IA esterna');
   w.close();
 }
 
