@@ -230,3 +230,34 @@ test('ap_oggi: non espone log ne orarioFisso', () => {
   assert.deepStrictEqual(Object.keys(r).sort(), ['data', 'routine', 'task']);
   assert.ok(!JSON.stringify(r).includes('completamenti') && !JSON.stringify(r).includes('materia'));
 });
+
+test('ap_proponi: chiavi extra o id su un tipo che non lo richiede -> errore, niente scritto', () => {
+  const { dir, a } = conStato(() => {});
+  const c = ctx(a, cl(['agenda']));
+  for (const op of [
+    { tipo: 'task.aggiungi', id: 'x', dati: { nome: 'A' } },
+    { tipo: 'task.aggiungi', dati: { nome: 'A' }, extra: true },
+  ]) {
+    assert.throws(() => S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: [op] }, c), S.ErroreStrumento);
+  }
+  assert.ok(!fs.existsSync(path.join(dir, 'proposte.json')));
+});
+
+test('ap_proponi: con 50 proposte in attesa del client -> errore chiaro e nulla di nuovo', () => {
+  const { a } = conStato(() => {});
+  for (let i = 0; i < 50; i++) a.aggiungiProposta({ id: 'p' + i, client: 'claude', stato: 'in_attesa' });
+  a.aggiungiProposta({ id: 'vecchia', client: 'claude', stato: 'applicata' });
+  const proposta = { motivo: 'm', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }] };
+  assert.throws(() => S.eseguiStrumento('ap_proponi', proposta, ctx(a, cl(['agenda']))), (e) => e instanceof S.ErroreStrumento && /50/.test(e.message) && /in attesa/.test(e.message));
+  assert.strictEqual(a.elencaProposte().length, 51);
+  // un altro client non e' bloccato
+  const r = S.eseguiStrumento('ap_proponi', proposta, ctx(a, cl(['agenda'], 'altro')));
+  assert.strictEqual(r.stato, 'in_attesa');
+});
+
+test('ap_proponi: con 49 proposte in attesa la 50a passa', () => {
+  const { a } = conStato(() => {});
+  for (let i = 0; i < 49; i++) a.aggiungiProposta({ id: 'p' + i, client: 'claude', stato: 'in_attesa' });
+  const r = S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }] }, ctx(a, cl(['agenda'])));
+  assert.strictEqual(r.stato, 'in_attesa');
+});

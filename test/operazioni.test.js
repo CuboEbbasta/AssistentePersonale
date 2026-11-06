@@ -218,3 +218,35 @@ test('hashRecord con chiave __proto__ non imposta il prototipo e la distingue', 
   assert.notEqual(O.hashRecord(a), O.hashRecord(b));
   assert.notEqual(O.hashRecord(a), O.hashRecord({ b: 1 }));
 });
+
+test('hashRecord ignora le chiavi undefined come JSON.stringify', () => {
+  assert.equal(O.hashRecord({ a: 1, b: undefined }), O.hashRecord({ a: 1 }));
+  assert.equal(O.hashRecord({ a: { x: 1, y: undefined } }), O.hashRecord({ a: { x: 1 } }));
+  assert.notEqual(O.hashRecord({ a: 1, b: null }), O.hashRecord({ a: 1 }));
+  assert.equal(O.hashRecord([undefined]), O.hashRecord([null]));
+});
+
+test('validaOperazione rifiuta chiavi dell operazione diverse da tipo|id|baseHash|dati', () => {
+  const s = conRoutine();
+  const base = { tipo: 'task.aggiungi', dati: { nome: 'A' } };
+  assert.equal(O.validaOperazione(s, base, OGGI).ok, true);
+  const r = O.validaOperazione(s, { ...base, extra: 1 }, OGGI);
+  assert.equal(r.ok, false);
+  assert.match(r.errori.join(';'), /extra/);
+  assert.equal(O.validaOperazione(s, { ...base, dati: { nome: 'A' }, __proto__x: 1 }, OGGI).ok, false);
+  const ok = O.validaOperazione(s, { tipo: 'routine.modifica', id: 'r1', baseHash: O.hashRecord(s.routine[0]), dati: { nome: 'B' } }, OGGI);
+  assert.equal(ok.ok, true);
+});
+
+test('validaOperazione rifiuta id quando il tipo non lo richiede', () => {
+  const s = conRoutine();
+  for (const op of [
+    { tipo: 'task.aggiungi', id: 'x', dati: { nome: 'A' } },
+    { tipo: 'diario.imposta', id: 'x', dati: { data: OGGI, fattoBene: 'a', daMigliorare: 'b', obiettivoDomani: 'c', voto: '7' } },
+    { tipo: 'pasto.aggiungi', id: 'x', dati: { data: OGGI, nome: 'P', kcal: 100, proteine: 1, carboidrati: 1, grassi: 1 } },
+  ]) {
+    const r = O.validaOperazione(s, op, OGGI);
+    assert.equal(r.ok, false, op.tipo);
+    assert.match(r.errori.join(';'), /id/);
+  }
+});

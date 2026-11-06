@@ -16,6 +16,13 @@ const UIProposte = (function () {
   let avviso = '';          // ultimo messaggio d'errore/stato da mostrare
   let ascoltatoreConteggio = null;
   const inCorso = new Set(); // id delle proposte con un'azione in corso (anti doppio clic)
+  const MAX_APPLICATE = 200; // quante proposte applicate ricordare in stato.proposteApplicate
+
+  /** Id delle proposte gia applicate (salvati insieme allo stato, quindi mai persi). */
+  function giaApplicate() {
+    const l = Dati.stato() && Dati.stato().proposteApplicate;
+    return Array.isArray(l) ? l : [];
+  }
 
   function api() {
     return (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.dati) || null;
@@ -86,7 +93,7 @@ const UIProposte = (function () {
       b.addEventListener('click', () => applica(p.id));
       azioni.appendChild(b);
     }
-    const r = el('button', 'btn btn-sm', applicabile ? 'Rifiuta' : 'Rifiuta ed elimina');
+    const r = el('button', 'btn btn-sm', 'Rifiuta');
     r.type = 'button';
     r.setAttribute('data-azione', 'rifiuta');
     r.disabled = occupata;
@@ -125,7 +132,12 @@ const UIProposte = (function () {
     }
     if (avviso === 'Non riesco a leggere le proposte. Riprova tra poco.') avviso = '';
     const prima = elenco.length;
-    elenco = r.proposte.filter(p => p && typeof p === 'object' && p.stato === 'in_attesa' && typeof p.id === 'string');
+    const attese = r.proposte.filter(p => p && typeof p === 'object' && p.stato === 'in_attesa' && typeof p.id === 'string');
+    // gia applicate ma rimaste "in_attesa" (segnalazione fallita): non riapplicabili, si ritenta in silenzio
+    const registro = giaApplicate();
+    const doppie = attese.filter(p => registro.includes(p.id));
+    elenco = attese.filter(p => !registro.includes(p.id));
+    doppie.forEach(p => { segna(p.id, 'applicata'); });
     disegna();
     if ((elenco.length !== prima || prima === 0) && ascoltatoreConteggio) ascoltatoreConteggio(elenco.length);
   }
@@ -158,6 +170,8 @@ const UIProposte = (function () {
         avviso = 'Proposta non applicabile: ' + (r.motivi || []).join('; ');
         return;
       }
+      // l'id entra nello stato PRIMA del salvataggio: se la segnalazione sotto fallisce, la proposta non e' riapplicabile
+      r.stato.proposteApplicate = giaApplicate().filter(x => x !== id).concat([id]).slice(-MAX_APPLICATE);
       const salvato = await Dati.sostituisciStato(r.stato);
       if (!salvato) {
         avviso = 'Non sono riuscito a salvare i dati: la proposta NON è stata applicata. Riprova.';

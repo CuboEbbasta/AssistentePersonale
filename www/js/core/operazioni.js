@@ -9,6 +9,7 @@
 })(typeof self !== 'undefined' ? self : this, function (NucleoSchema) {
 
   const CHIAVI_VIETATE = ['__proto__', 'constructor', 'prototype'];
+  const CHIAVI_OPERAZIONE = ['tipo', 'id', 'baseHash', 'dati'];
   const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
   // ---------- Validatori elementari: ritornano null se ok, altrimenti il messaggio ----------
@@ -191,7 +192,7 @@
   // ---------- Hash (FNV-1a 32 bit su JSON con chiavi ordinate) ----------
   function ordina(v) {
     if (Array.isArray(v)) return v.map(ordina);
-    if (v && typeof v === 'object') { const o = {}; Object.keys(v).sort().forEach(k => { Object.defineProperty(o, k, { value: ordina(v[k]), enumerable: true, writable: true, configurable: true }); }); return o; }
+    if (v && typeof v === 'object') { const o = {}; Object.keys(v).sort().forEach(k => { if (v[k] === undefined) return; /* come JSON.stringify */ Object.defineProperty(o, k, { value: ordina(v[k]), enumerable: true, writable: true, configurable: true }); }); return o; }
     return v === undefined ? null : v;
   }
   function hashRecord(valore) {
@@ -219,6 +220,9 @@
     if (!op || typeof op !== 'object') return { ok: false, errori: ['operazione mancante'] };
     const d = def(op.tipo);
     if (!d) return { ok: false, errori: ['tipo di operazione non ammesso'] };
+    const extraChiavi = Object.keys(op).filter(k => !CHIAVI_OPERAZIONE.includes(k));
+    if (extraChiavi.length) return { ok: false, errori: ['chiavi non ammesse nell operazione: ' + extraChiavi.map(k => k.slice(0, 40)).join(', ')] };
+    if (!d.richiedeId && has(op, 'id')) return { ok: false, errori: ['id non ammesso per questo tipo di operazione'] };
     if (!op.dati || typeof op.dati !== 'object' || Array.isArray(op.dati)) return { ok: false, errori: ['dati mancanti'] };
     if (chiaviVietate(op.dati, 0)) return { ok: false, errori: ['dati con chiavi vietate'] };
 

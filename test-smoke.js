@@ -709,6 +709,7 @@ async function testProposte() {
 
   const chiamate = [];
   let salvataggioOk = true;
+  let aggiornaFallisce = false;
   const proposte = [pOk, pObs, pEvil];
   const api = {
     statoLeggi: async () => ({ ok: true, json: JSON.stringify(salvato), daBackup: false }),
@@ -717,6 +718,7 @@ async function testProposte() {
     proposteElenca: async () => ({ ok: true, proposte: proposte.filter(p => p.stato === 'in_attesa') }),
     proposteAggiorna: async (id, patch) => {
       chiamate.push([id, patch]);
+      if (aggiornaFallisce) return { ok: false };
       const p = proposte.find(x => x.id === id);
       if (p) p.stato = patch.stato;
       return { ok: true };
@@ -745,6 +747,7 @@ async function testProposte() {
   assert(bott(pOk.id, 'applica') && bott(pOk.id, 'rifiuta'), 'la proposta applicabile deve avere Applica e Rifiuta');
   assert(!bott(pObs.id, 'applica'), 'la proposta obsoleta NON deve avere Applica');
   assert(bott(pObs.id, 'rifiuta'), 'la proposta obsoleta deve avere Rifiuta');
+  assert(bott(pObs.id, 'rifiuta').textContent === 'Rifiuta', 'il bottone si chiama solo "Rifiuta" (non elimina nulla)');
   assert(/modificat/i.test(scheda(pObs.id).textContent), 'la proposta obsoleta deve mostrare il motivo');
   assert(scheda(pOk.id).textContent.includes('Ripassa storia'), 'l\'anteprima deve essere mostrata');
 
@@ -777,6 +780,30 @@ async function testProposte() {
   bott(pObs.id, 'rifiuta').dispatchEvent(new w.Event('click', { bubbles: true }));
   await attendi(250);
   assert(chiamate.some(c => c[0] === pObs.id && c[1].stato === 'rifiutata'), 'Rifiuta deve chiamare proposteAggiorna(id,{stato:"rifiutata"})');
+
+  // salvataggio ok ma proposteAggiorna fallisce: dopo il ricaricamento dell'elenco la proposta
+  // NON e' riapplicabile (niente task doppio) e viene segnata in silenzio appena possibile
+  const pDup = crea('Doppione?', 'ap-ia', [{ tipo: 'task.aggiungi', dati: { nome: 'Task anti-doppione' } }]);
+  proposte.push(pDup);
+  w.dispatchEvent(new w.Event('focus'));
+  await attendi(200);
+  aggiornaFallisce = true;
+  const contaDup = () => w.Dati.stato().task.filter(t => t.nome === 'Task anti-doppione').length;
+  bott(pDup.id, 'applica').dispatchEvent(new w.Event('click', { bubbles: true }));
+  await attendi(250);
+  assert(contaDup() === 1, 'Applica deve aggiungere il task una volta (trovati ' + contaDup() + ')');
+  assert((w.Dati.stato().proposteApplicate || []).includes(pDup.id), 'id della proposta deve essere registrato in stato.proposteApplicate insieme al salvataggio');
+  w.dispatchEvent(new w.Event('focus'));
+  await attendi(200);
+  assert(!scheda(pDup.id), 'dopo il ricaricamento la proposta gia applicata non deve ricomparire');
+  assert(contaDup() === 1, 'il task non deve duplicarsi (trovati ' + contaDup() + ')');
+  const tentativiSilenziosi = chiamate.filter(c => c[0] === pDup.id && c[1].stato === 'applicata').length;
+  assert(tentativiSilenziosi >= 2, 'aggiorna() deve ritentare in silenzio proposteAggiorna(applicata) (tentativi: ' + tentativiSilenziosi + ')');
+  aggiornaFallisce = false;
+  w.dispatchEvent(new w.Event('focus'));
+  await attendi(200);
+  assert(pDup.stato === 'applicata', 'al ritentativo riuscito la proposta risulta applicata');
+  assert(!scheda(pDup.id) && contaDup() === 1, 'la proposta non e piu in elenco e il task resta uno solo');
 
   // al rientro in primo piano l'elenco si aggiorna
   const nuova = crea('Nuova dopo', 'ap-ia', [{ tipo: 'task.aggiungi', dati: { nome: 'Comparsa dopo' } }]);

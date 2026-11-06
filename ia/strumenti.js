@@ -20,6 +20,7 @@ class ErroreStrumento extends Error {
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const MS_GIORNO = 86400000;
+const MAX_IN_ATTESA = 50; // proposte in attesa per client
 
 // Chiavi dello stato indicizzate per data (YYYY-MM-DD)
 const CHIAVI_PER_DATA = ['journal', 'dietaLog', 'workoutLog', 'sonnoLog', 'log'];
@@ -175,6 +176,10 @@ function apProponi(args, ctx) {
       throw new ErroreStrumento('Operazione ' + (i + 1) + ': non hai il permesso di proporre questa modifica.');
     }
   });
+  const inAttesa = ctx.archivio.elencaProposte().filter(x => x && x.client === ctx.client.nome && x.stato === 'in_attesa').length;
+  if (inAttesa >= MAX_IN_ATTESA) {
+    throw new ErroreStrumento('Hai già ' + inAttesa + ' proposte in attesa (massimo ' + MAX_IN_ATTESA + '): aspetta che vengano approvate o rifiutate nell app prima di proporne altre.');
+  }
   const r = Proposte.creaProposta(
     { client: ctx.client.nome, motivo, operazioni },
     ctx.archivio.leggiStato(), ctx.oggiISO, ctx.adessoISO,

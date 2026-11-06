@@ -41,3 +41,14 @@ test('SEZIONI e SEZIONI_SENSIBILI', () => {
   assert.deepEqual(S.SEZIONI.sonno, ['sonnoLog']);
   assert.deepEqual(S.SEZIONI_SENSIBILI, ['dieta', 'workout', 'sonno', 'diario']);
 });
+
+test('migra conserva proposteApplicate e le viste per client non la espongono', () => {
+  const Permessi = require('../ia/permessi.js');
+  const s = S.statoDefault();
+  s.proposteApplicate = ['proposta_1', 'proposta_2'];
+  const m = S.migra(JSON.parse(JSON.stringify(s)));
+  assert.deepStrictEqual(m.proposteApplicate, ['proposta_1', 'proposta_2']);
+  const vista = Permessi.vistaStato(m, Object.keys(S.SEZIONI));
+  assert.ok(!('proposteApplicate' in vista));
+  assert.ok(!JSON.stringify(vista).includes('proposta_1'));
+});
