@@ -145,7 +145,7 @@ const UiPanoramica = (function () {
         <h3>Com'è andato l'anno</h3>
         <div class="quadrante-wrap"><div>${Quadrante.renderTortaGenerica(fetteAnno, 220)}</div></div>
         <div class="quadrante-legenda">
-          ${fetteAnno.map(f => `<div class="legenda-riga"><span class="legenda-swatch" style="background:${f.colore}"></span><span class="legenda-nome">${f.nome}</span><span class="legenda-tempo">${f.valore} gg</span></div>`).join('')}
+          ${fetteAnno.map(f => `<div class="legenda-riga"><span class="legenda-swatch" style="background:${f.colore}"></span><span class="legenda-nome">${UiRoutine.escapeHtml(f.nome)}</span><span class="legenda-tempo">${f.valore} gg</span></div>`).join('')}
         </div>
       </div>
     `;

@@ -111,10 +111,10 @@ const UiWorkout = (function () {
         <div class="giorni-settimana" style="margin-bottom:10px;">
           ${scheda.giorni.map((g, i) => `<button type="button" class="giorno-toggle ${giornoSelezionatoAdattiva === i ? 'selezionato' : ''}" data-giorno-adattiva="${i}" style="width:auto;padding:0 10px;">${i+1}</button>`).join('')}
         </div>
-        <div class="elemento-meta" style="margin-bottom:4px;"><strong>${giornoCorrente.etichetta}</strong></div>
+        <div class="elemento-meta" style="margin-bottom:4px;"><strong>${UiRoutine.escapeHtml(giornoCorrente.etichetta)}</strong></div>
         ${renderTabellaEsercizi(giornoCorrente.esercizi)}
         <div class="riga-btn" style="margin-top:12px;">
-          <button class="btn btn-sm btn-ok" data-registra-tipo="adattiva" data-registra-etichetta="${giornoCorrente.etichetta}" data-registra-indice="${giornoSelezionatoAdattiva}">${Icone.svg('check', 14)} Ho fatto questa oggi</button>
+          <button class="btn btn-sm btn-ok" data-registra-tipo="adattiva" data-registra-etichetta="${UiRoutine.escapeHtml(giornoCorrente.etichetta)}" data-registra-indice="${giornoSelezionatoAdattiva}">${Icone.svg('check', 14)} Ho fatto questa oggi</button>
           <button class="btn btn-sm btn-warn" id="btn-rigenera-adattiva">Rigenera</button>
         </div>
       `;

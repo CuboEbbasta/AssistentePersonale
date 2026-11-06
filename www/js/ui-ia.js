@@ -75,7 +75,7 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
         const nomeAttuale = entita.nome || entita.titolo;
         return `
         <div class="card-flat" style="margin-bottom:8px;border:1px solid var(--accent);">
-          <div class="elemento-meta">Proposta per <strong>${UiRoutine.escapeHtml(nomeAttuale)}</strong> (${m.tipo}, campo "${m.campo}")</div>
+          <div class="elemento-meta">Proposta per <strong>${UiRoutine.escapeHtml(nomeAttuale)}</strong> (${UiRoutine.escapeHtml(m.tipo)}, campo "${UiRoutine.escapeHtml(m.campo)}")</div>
           <div style="margin:6px 0;font-size:13.5px;">${UiRoutine.escapeHtml(m.nuovoValore)}</div>
           <div class="riga-btn">
             <button class="btn btn-sm btn-ok btn-applica-modifica">${Icone.svg('check', 14)} Applica</button>
@@ -126,11 +126,11 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
         </div>
         <div class="campo">
           <label>Indirizzo server</label>
-          <input type="text" id="f-ia-indirizzo" value="${cfg.indirizzoServer}" placeholder="http://192.168.1.50:11434">
+          <input type="text" id="f-ia-indirizzo" value="${UiRoutine.escapeHtml(cfg.indirizzoServer)}" placeholder="http://192.168.1.50:11434">
         </div>
         <div class="campo">
           <label>Modello</label>
-          <input type="text" id="f-ia-modello" value="${cfg.modello}" placeholder="Es. qwen3:8b">
+          <input type="text" id="f-ia-modello" value="${UiRoutine.escapeHtml(cfg.modello)}" placeholder="Es. qwen3:8b">
         </div>
         <div class="riga-btn">
           <button class="btn btn-sm btn-accent" id="btn-ia-salva">Salva</button>

@@ -606,6 +606,40 @@ async function main() {
   await window.Dati.eliminaParolaChiave(window.Dati.stato().paroleChiaveTipi.length - 1);
   assert(!window.Dati.stato().paroleChiaveTipi.some(p => p.parola === 'fumetto'), 'deve essere possibile rimuovere una parola chiave');
 
+  // ---- XSS: testo utente/IA nei nomi non deve mai diventare HTML (Oggi + barra del giorno + Panoramica) ----
+  {
+    const veleno = '<img src=x onerror="window.__xss=1">';
+    const sx = window.Dati.stato();
+    const oggiX = window.DataUtils.oggiISO();
+    const giornoX = window.DataUtils.weekdayISO(oggiX);
+    sx.routine.push({ id: 'r_xss', nome: veleno, oraInizio: '10:00', durataMinuti: 30, priorita: 5, giorni: [1,2,3,4,5,6,7], attiva: true });
+    sx.task.push({ id: 't_xss', nome: veleno, priorita: 5, tipo: 'altro', ambito: 'giorno', scadenza: oggiX, oraPromemoria: '15:00', durataStimataMinuti: 30, note: '', completata: false });
+    sx.orarioFisso.push({ id: 'o_xss', materia: veleno, tipo: 'altro', giorno: giornoX, oraInizio: '17:00', oraFine: '18:00', aula: veleno, note: '' });
+    if (!sx.log[oggiX]) sx.log[oggiX] = { tipo: 'abituale', completamenti: {} };
+    sx.log[oggiX].completamenti['routine:r_xss'] = true;
+    await window.Dati.salva();
+    window.App.mostraTab('oggi');
+    window.App.aggiornaOggi();
+    window.App.mostraTab('panoramica');
+    window.document.getElementById('panoramica-corpo').querySelector('[data-sv="mese"]').dispatchEvent(new window.Event('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 50));
+    const viewMese = window.document.getElementById('panoramica-corpo');
+    assert(viewMese.textContent.includes(veleno), 'la vista Mese deve mostrare il nome malevolo come testo');
+    assert(viewMese.querySelectorAll('svg title').length > 0 && viewMese.querySelectorAll('svg img').length === 0, 'la torta del mese non deve creare img dal titolo');
+    viewMese.querySelector('[data-sv="anno"]').dispatchEvent(new window.Event('click', { bubbles: true }));
+    window.App.mostraTab('oggi');
+    window.App.aggiornaOggi();
+    assert(window.document.querySelectorAll('img').length === 0, 'nessun elemento img deve esistere nel documento dopo aver ridisegnato Oggi e Panoramica (XSS)');
+    assert(window.__xss === undefined, 'window.__xss deve restare undefined (XSS eseguito)');
+    assert(window.document.getElementById('quadrante-cont').textContent.includes(veleno), 'il titolo della barra del giorno deve contenere il nome come testo');
+    sx.routine = sx.routine.filter(r => r.id !== 'r_xss');
+    sx.task = sx.task.filter(t => t.id !== 't_xss');
+    sx.orarioFisso = sx.orarioFisso.filter(o => o.id !== 'o_xss');
+    delete sx.log[oggiX].completamenti['routine:r_xss'];
+    await window.Dati.salva();
+    window.App.aggiornaTutto();
+  }
+
   window.close();
 
   await testProposte();

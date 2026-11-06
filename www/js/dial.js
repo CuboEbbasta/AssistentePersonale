@@ -10,6 +10,12 @@ const Quadrante = (function () {
   const COLORE_LIBERO = 'var(--surface-alt)';
   let contatoreId = 0;
 
+  // Nomi e colori possono arrivare da testo utente/IA: mai inserirli nell'SVG senza escape.
+  // (Copia locale: dial.js e' caricato prima di ui-routine.js, dove vive UiRoutine.escapeHtml.)
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   function polareACartesiane(cx, cy, r, angoloGradi) {
     const rad = (angoloGradi - 90) * Math.PI / 180;
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -56,7 +62,7 @@ const Quadrante = (function () {
     const segmenti = spicchi.map(s => {
       const x = (s.inizioMin / 1440) * larghezza;
       const w = Math.max(0, ((s.fineMin - s.inizioMin) / 1440) * larghezza);
-      return `<rect x="${x.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${altezzaBarra}" fill="${s.colore}"><title>${s.nome}</title></rect>`;
+      return `<rect x="${x.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${altezzaBarra}" fill="${esc(s.colore)}"><title>${esc(s.nome)}</title></rect>`;
     }).join('');
 
     let tacche = '';
@@ -92,7 +98,7 @@ const Quadrante = (function () {
       const a0 = (cursore / totale) * 360;
       cursore += f.valore;
       const a1 = (cursore / totale) * 360;
-      return `<path d="${pathSpicchio(cx, cy, r, a0, a1)}" fill="${f.colore}" stroke="var(--surface)" stroke-width="1.5"><title>${f.nome}</title></path>`;
+      return `<path d="${pathSpicchio(cx, cy, r, a0, a1)}" fill="${esc(f.colore)}" stroke="var(--surface)" stroke-width="1.5"><title>${esc(f.nome)}</title></path>`;
     }).join('');
     return `<svg class="quadrante-svg" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
       <circle cx="${cx}" cy="${cy}" r="${r + 1}" fill="var(--surface)" />
