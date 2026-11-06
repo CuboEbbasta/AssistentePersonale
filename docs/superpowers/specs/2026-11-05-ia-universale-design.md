@@ -15,13 +15,13 @@ Principio guida, in parole dell'utente: l'app deve essere soprattutto modificabi
 1. Un'IA qualsiasi può leggere i dati (oggi, routine, task, obiettivi, diario, salute…) tramite un'interfaccia standard.
 2. Un'IA può **proporre** modifiche; le modifiche si applicano solo dopo approvazione dell'utente nell'app (bottone Applica/Rifiuta, come già promette il README).
 3. L'interfaccia non dipende da un solo standard: MCP è un adattatore, non il fondamento.
-4. Funziona per chiunque: installazione semplice, nessun riferimento a Jarvis, al vault o al PC del proprietario.
+4. Funziona per chiunque: installazione semplice, nessun riferimento a sistemi privati o al PC del proprietario.
 5. I dati e le funzioni esistenti non si rompono (nessuna perdita, migrazione automatica).
 
 ## Non-obiettivi (per questa fase)
 - Server o sincronizzazione su Android (fase successiva).
 - Sincronizzazione cloud o account utente.
-- Integrazione con Jarvis/DBVault; Lumetto (altro progetto, altra sessione).
+- Integrazioni con altri progetti personali.
 - Un modello IA incorporato nell'app.
 
 ## Anti-obiettivi (sarebbe un fallimento anche se "funziona")
@@ -65,7 +65,7 @@ Scelto **B** dall'utente, perché rende l'app utilizzabile da IA diverse senza d
 11. **IA integrata (Ollama).** Nella prima fase non si tocca. In seguito può usare la stessa coda.
 12. **Perimetro minimo della prima fase.** Lettura di tutte le sezioni permesse. Proposte di scrittura per: routine, task, obiettivi, diario, pasti registrati, sonno. Il resto (schede workout, profilo, piano dieta, orario fisso, periodi dell'anno) dopo.
 
-13. **Trasporto MCP (chiude la domanda sul client).** Il modello locale del proprietario passa da Hermes, che collega i server MCP tramite URL HTTP (`mcp_servers` con `url:`). Quindi il primo trasporto è **MCP su HTTP, solo 127.0.0.1, con token** (JSON-RPC su POST, come il server MCP già esistente di Jarvis), da eseguire come processo autonomo che funziona anche con l'app chiusa. **stdio** viene dopo, per client di terzi. Hermes si collega con un blocco `assistente` e un filtro sugli strumenti, dopo approvazione e prova. Decisione registrata come proposta in ADR-0009 del vault Jarvis.
+13. **Trasporto MCP (chiude la domanda sul client).** Il modello locale del proprietario passa da Hermes, che collega i server MCP tramite URL HTTP (`mcp_servers` con `url:`). Quindi il primo trasporto è **MCP su HTTP, solo 127.0.0.1, con token** (JSON-RPC su POST, come un normale server MCP HTTP), da eseguire come processo autonomo che funziona anche con l'app chiusa. **stdio** viene dopo, per client di terzi. Hermes si collega con un blocco `assistente` e un filtro sugli strumenti, dopo approvazione e prova. 
 
 ## Architettura (a grandi linee)
 ```

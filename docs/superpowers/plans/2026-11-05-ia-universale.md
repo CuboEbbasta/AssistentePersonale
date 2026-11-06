@@ -17,7 +17,7 @@ Si eseguono **solo** i Task 1–7, 9, 10 e 12 (senza la documentazione estesa: b
 
 ## Global Constraints
 - Node ≥ 22; test con `node --test test/` (niente framework nuovi). `test-smoke.js` deve continuare a passare (`node test-smoke.js`).
-- Zero dipendenze runtime nuove: server MCP scritto a mano (JSON-RPC su POST, protocollo `2025-06-18`), come `agents/jarvis_mcp/server.py` del progetto Jarvis.
+- Zero dipendenze runtime nuove: server MCP scritto a mano (JSON-RPC su POST, protocollo `2025-06-18`), come un semplice server MCP HTTP di riferimento.
 - Server in ascolto **solo su `127.0.0.1`**, **spento di default**, porta predefinita `3040`, token `Authorization: Bearer <token>`; token salvati solo come hash SHA-256.
 - Nessuno strumento scrive lo stato: le scritture dell'IA sono solo proposte; applica/rifiuta solo dall'app. Proposte: massimo 50 operazioni, richieste massimo 100 000 byte.
 - Sezioni sensibili spente di default per ogni nuovo client: `dieta`, `workout`, `sonno`, `diario`. Default di un nuovo client: `['agenda','obiettivi']`.
@@ -136,7 +136,7 @@ Si eseguono **solo** i Task 1–7, 9, 10 e 12 (senza la documentazione estesa: b
 **Interfaces:** Consumes Task 5, 6. Produces `creaServerMcp({ archivio, host = '127.0.0.1', porta }): http.Server` (non avvia da solo l'ascolto). Percorso `POST /mcp`; metodi `initialize` (versione `2025-06-18`, nome `assistente-personale`), `notifications/initialized` (202 senza corpo), `ping`, `tools/list`, `tools/call`; risposte JSON-RPC; errori di strumento come `isError:true`.
 
 - [ ] **Step 1: test** (porta 0, client `http`): senza `Authorization` → 401; token errato → 401; token giusto → `tools/list` con i 4 strumenti; **`Origin: http://evil.example` → 403; `Host: evil.example` → 403** (accettati solo `127.0.0.1`, `localhost` e il relativo `:porta`); corpo oltre 100 000 byte → 413; JSON non valido → errore JSON-RPC `-32700`; con `abilitato:false` nella config → 503; `tools/call ap_proponi` end-to-end crea la proposta; **nessuna risposta contiene `tokenHash` né il percorso dei file**.
-- [ ] **Step 2–5:** FAIL → implementa (modello: `agents/jarvis_mcp/server.py` del progetto Jarvis, sola libreria standard) → PASS → Commit (con OK).
+- [ ] **Step 2–5:** FAIL → implementa (sola libreria standard) → PASS → Commit (con OK).
 
 ### Task 8: stdio e CLI
 **Files:** Create `ia/mcp-stdio.js`, `ia/bin/ap-ia.js`, `test/cli.test.js`; Modify `package.json` (`"bin": {"ap-ia": "ia/bin/ap-ia.js"}`).
@@ -184,7 +184,7 @@ Si eseguono **solo** i Task 1–7, 9, 10 e 12 (senza la documentazione estesa: b
 ---
 
 ## Fuori da questo piano (richiede l'OK dell'utente)
-- Collegare Hermes: aggiungere il blocco `assistente` a `%LOCALAPPDATA%\hermes\config.yaml` (stesso schema di `hermes-data/osiris-mcp-block.yaml` nel progetto Jarvis, con il token in un posto non versionato) e provare con il modello 8B che `ap_proponi` produca operazioni valide. Poi aggiornare ADR-0009 e la scheda del progetto nel vault.
+- Collegare Hermes: aggiungere il blocco `assistente` a `%LOCALAPPDATA%\hermes\config.yaml` (vedi `docs/hermes-mcp-block.example.yaml`, con il token in un posto non versionato) e provare con il modello 8B che `ap_proponi` produca operazioni valide.
 - Android e web: server e sincronizzazione (fase successiva).
 - Cambiare il flusso dell'IA integrata (Ollama).
 
