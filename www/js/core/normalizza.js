@@ -357,6 +357,7 @@
     }
     if (toll) {
       for (const k of Object.keys(out)) if (!canonici.includes(k)) delete out[k];
+      if (op.tipo === 'routine.aggiungi' && !has(out, 'giorni')) out.giorni = [1, 2, 3, 4, 5, 6, 7]; // predefinito: tutti i giorni
       if (canonici.includes('data') && !has(out, 'data') && oggiISO && (op.tipo === 'diario.imposta' || op.tipo === 'pasto.aggiungi' || op.tipo === 'sonno.imposta')) out.data = oggiISO;
     }
     return Object.assign({}, op, { dati: out });

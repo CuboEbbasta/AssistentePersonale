@@ -88,8 +88,20 @@ function creaGestoriIA(opzioni = {}) {
       const { prompt, sistema } = arg;
       if (typeof prompt !== 'string' || prompt.length === 0 || prompt.length > LIMITE_TESTO) throw new ErroreIA('Testo della richiesta non valido.');
       if (sistema !== undefined && sistema !== null && (typeof sistema !== 'string' || sistema.length > LIMITE_TESTO)) throw new ErroreIA('Istruzioni di sistema non valide.');
-      const richiesta = NucleoClienteIA.costruisciGenerazione(cfg, prompt, sistema || '');
-      const json = await richiediJson(richiesta.url, { method: 'POST', headers: richiesta.headers, body: richiesta.corpo }, timeoutGenerazione);
+      if (arg.json !== undefined && typeof arg.json !== 'boolean') throw new ErroreIA('Opzione json non valida.');
+      if (arg.think !== undefined && typeof arg.think !== 'boolean') throw new ErroreIA('Opzione think non valida.');
+      const opz = { json: arg.json === true };
+      if (arg.think === false) opz.think = false;
+      const invia = (o) => {
+        const richiesta = NucleoClienteIA.costruisciGenerazione(cfg, prompt, sistema || '', o);
+        return richiediJson(richiesta.url, { method: 'POST', headers: richiesta.headers, body: richiesta.corpo }, timeoutGenerazione);
+      };
+      let json;
+      try { json = await invia(opz); } catch (e) {
+        // server vecchio che rifiuta "think" (400): riprova una volta senza
+        if (opz.think === false && e instanceof ErroreIA && /codice 400/.test(e.message)) json = await invia({ json: opz.json });
+        else throw e;
+      }
       return { ok: true, testo: NucleoClienteIA.leggiGenerazione(cfg.tipoServer, json) };
     } catch (e) { return comeErrore(e); }
   }

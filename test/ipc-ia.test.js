@@ -137,3 +137,35 @@ test('validazione degli argomenti', async () => {
   assert.equal((await g.elencaModelli({ ...ok, indirizzoServer: 'ftp://x' })).ok, false);
   assert.equal((await g.elencaModelli(null)).ok, false);
 });
+
+test('chiama con json e think:false: inoltrati a Ollama; opzioni non booleane rifiutate', async (t) => {
+  const f = await avviaFinto(t);
+  const g = creaGestoriIA();
+  const cfg = { tipoServer: 'ollama', indirizzoServer: f.base, modello: 'qwen3:8b', chiaveApi: '' };
+  assert.equal((await g.chiama({ ...cfg, prompt: 'p', json: true, think: false })).ok, true);
+  const c = JSON.parse(f.richieste[0].corpo);
+  assert.equal(c.format, 'json'); assert.equal(c.think, false);
+  assert.equal((await g.chiama({ ...cfg, prompt: 'p', json: 'si' })).ok, false);
+  assert.equal((await g.chiama({ ...cfg, prompt: 'p', think: 0 })).ok, false);
+});
+
+test('chiama con think:false: se il server risponde 400 riprova senza think', async (t) => {
+  const corpi = [];
+  const server = http.createServer((req, res) => {
+    let corpo = '';
+    req.on('data', c => { corpo += c; });
+    req.on('end', () => {
+      corpi.push(JSON.parse(corpo));
+      if ('think' in corpi[corpi.length - 1]) { res.writeHead(400); return res.end('{"error":"does not support thinking"}'); }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ response: '{"ok":1}' }));
+    });
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const cfg = { tipoServer: 'ollama', indirizzoServer: 'http://127.0.0.1:' + server.address().port, modello: 'gemma2:9b', chiaveApi: '' };
+  const r = await creaGestoriIA().chiama({ ...cfg, prompt: 'p', json: true, think: false });
+  assert.deepEqual(r, { ok: true, testo: '{"ok":1}' });
+  assert.equal(corpi.length, 2);
+  assert.ok(!('think' in corpi[1]) && corpi[1].format === 'json');
+});

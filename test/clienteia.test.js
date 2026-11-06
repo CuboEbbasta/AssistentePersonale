@@ -97,3 +97,23 @@ test('tipo di server sconosciuto: errore', () => {
   assert.throws(() => C.costruisciElencoModelli({ ...ollama, tipoServer: 'boh' }), /tipo di server/i);
   assert.throws(() => C.leggiGenerazione('boh', {}), /tipo di server/i);
 });
+
+test('generazione in modalità JSON: Ollama format json, think false, contesto; senza opzioni resta invariata', () => {
+  const g = C.costruisciGenerazione(ollama, 'ciao', 'sys', { json: true, think: false });
+  const c = JSON.parse(g.corpo);
+  assert.equal(c.format, 'json');
+  assert.equal(c.think, false);
+  assert.equal(c.options.num_ctx, 8192);
+  assert.equal(c.stream, false);
+  const solo = JSON.parse(C.costruisciGenerazione(ollama, 'ciao', 'sys', { json: true }).corpo);
+  assert.ok(!('think' in solo));
+  const base = JSON.parse(C.costruisciGenerazione(ollama, 'ciao', 'sys', {}).corpo);
+  assert.ok(!('format' in base) && !('think' in base) && !('options' in base));
+});
+
+test('generazione in modalità JSON: OpenAI response_format json_object', () => {
+  const c = JSON.parse(C.costruisciGenerazione(openai, 'ciao', 'sys', { json: true, think: false }).corpo);
+  assert.deepEqual(c.response_format, { type: 'json_object' });
+  assert.ok(!('think' in c) && !('format' in c));
+  assert.ok(!('response_format' in JSON.parse(C.costruisciGenerazione(openai, 'ciao', 'sys').corpo)));
+});

@@ -12,6 +12,7 @@
   const O = NucleoOperazioni;
 
   function clona(v) { return typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v)); }
+  const GIORNI_BREVI = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'];
   const idFinto = () => { let n = 0; return (p) => p + '_sim' + (++n); };
 
   function sintetico(v) {
@@ -29,7 +30,7 @@
     const d = op.dati || {};
     const det = /\.modifica$/.test(op.tipo) ? dettaglioModifica(op, bers) : '';
     switch (op.tipo) {
-      case 'routine.aggiungi': return 'Aggiungi routine «' + d.nome + '»' + (d.oraInizio ? ' alle ' + d.oraInizio : '') + (d.priorita ? ', priorità ' + d.priorita : '');
+      case 'routine.aggiungi': return 'Aggiungi routine «' + d.nome + '»' + (d.oraInizio ? ' alle ' + d.oraInizio : '') + (d.durataMinuti ? ' per ' + d.durataMinuti + ' min' : '') + (Array.isArray(d.giorni) ? ', ' + (d.giorni.length === 7 ? 'ogni giorno' : d.giorni.map(g => GIORNI_BREVI[g - 1] || g).join(' ')) : '') + (d.priorita ? ', priorità ' + d.priorita : '');
       case 'routine.modifica': return 'Modifica routine «' + ((bers && bers.nome) || d.nome || op.id) + '»' + det;
       case 'task.aggiungi': return 'Aggiungi task «' + d.nome + '»' + (d.scadenza ? ' entro ' + d.scadenza : '') + (d.priorita ? ', priorità ' + d.priorita : '') + (d.ambito ? ', ambito ' + d.ambito : '');
       case 'task.modifica': return 'Modifica task «' + ((bers && bers.nome) || d.nome || op.id) + '»' + det;

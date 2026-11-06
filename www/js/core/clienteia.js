@@ -55,20 +55,24 @@
     return json.models.map(m => m && m.name).filter(n => typeof n === 'string' && n);
   }
 
-  function costruisciGenerazione(cfg, prompt, sistema) {
+  // opzioni (facoltative): { json: true } chiede una risposta JSON al server (Ollama format:'json', OpenAI response_format);
+  // { think: false } spegne il «ragionamento» dei modelli che lo hanno (Ollama): più veloce, e la risposta resta solo JSON.
+  // In modalità json la temperatura è bassa e su Ollama il contesto è 8192 token (prompt con esempi + dati dell'utente).
+  function costruisciGenerazione(cfg, prompt, sistema, opzioni) {
     controllaTipo(cfg.tipoServer);
+    const opz = opzioni || {};
     if (cfg.tipoServer === 'openai') {
       const messages = [];
       if (sistema) messages.push({ role: 'system', content: sistema });
       messages.push({ role: 'user', content: prompt });
-      return {
-        url: baseApi(cfg) + '/chat/completions',
-        headers: intestazioni(cfg, true),
-        corpo: JSON.stringify({ model: cfg.modello, messages, stream: false })
-      };
+      const corpo = { model: cfg.modello, messages, stream: false };
+      if (opz.json) { corpo.response_format = { type: 'json_object' }; corpo.temperature = 0.2; }
+      return { url: baseApi(cfg) + '/chat/completions', headers: intestazioni(cfg, true), corpo: JSON.stringify(corpo) };
     }
     const corpo = { model: cfg.modello, prompt, stream: false };
     if (sistema) corpo.system = sistema;
+    if (opz.json) { corpo.format = 'json'; corpo.options = { temperature: 0.2, num_ctx: 8192 }; }
+    if (opz.think === false) corpo.think = false;
     return { url: baseApi(cfg) + '/api/generate', headers: intestazioni(cfg, true), corpo: JSON.stringify(corpo) };
   }
 
