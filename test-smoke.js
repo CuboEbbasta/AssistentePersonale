@@ -513,6 +513,69 @@ async function main() {
   const risultatoTestIA = await window.ClienteIA.testConnessione();
   assert(risultatoTestIA.ok === false && typeof risultatoTestIA.errore === 'string', 'senza un server IA reale raggiungibile, testConnessione deve fallire con grazia (non lanciare eccezioni)');
 
+  // ---- IA: scelta del server e del modello (Ollama / compatibile OpenAI) ----
+  {
+    const doc = window.document;
+    const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+    const clic = (el) => el.dispatchEvent(new window.Event('click', { bubbles: true }));
+    const cambia = (el) => el.dispatchEvent(new window.Event('change', { bubbles: true }));
+    const visibile = (el) => !!el && !el.hidden && window.getComputedStyle(el).display !== 'none';
+    assert(window.Dati.stato().impostazioniIA.tipoServer === 'ollama' && window.Dati.stato().impostazioniIA.chiaveApi === '', 'le impostazioni IA devono avere tipoServer ollama e chiave vuota di default');
+
+    window.App.mostraTab('ia');
+    window.UiIA.render();
+    const selTipo = doc.getElementById('f-ia-tipo');
+    assert(selTipo && selTipo.value === 'ollama', 'il menu Tipo di server deve esistere e partire da Ollama');
+    assert(!visibile(doc.getElementById('campo-ia-chiave')), 'con Ollama il campo Chiave API non deve essere visibile');
+    assert(doc.getElementById('f-ia-indirizzo').placeholder === 'http://localhost:11434', 'segnaposto Ollama');
+
+    selTipo.value = 'openai';
+    cambia(selTipo);
+    assert(visibile(doc.getElementById('campo-ia-chiave')), 'con OpenAI il campo Chiave API deve essere visibile');
+    assert(doc.getElementById('f-ia-chiave').type === 'password', 'la chiave API deve essere un campo password');
+    assert(doc.getElementById('f-ia-indirizzo').placeholder === 'http://localhost:4000', 'segnaposto OpenAI');
+    assert(/dispositivo/i.test(doc.getElementById('campo-ia-chiave').textContent), 'deve avvisare che la chiave resta salvata sul dispositivo');
+
+    // Verifica connessione con un server finto (testo da server con tag HTML: deve restare testo)
+    const richiesteIA = [];
+    window.fetch = async (url, init) => {
+      richiesteIA.push({ url, auth: init && init.headers && init.headers.Authorization });
+      return { ok: true, status: 200, json: async () => ({ data: [{ id: 'gpt-uno' }, { id: '<img src=x onerror=alert(1)>' }] }) };
+    };
+    doc.getElementById('f-ia-indirizzo').value = 'http://localhost:4000';
+    doc.getElementById('f-ia-chiave').value = 'sk-prova';
+    clic(doc.getElementById('btn-ia-test'));
+    await attendi(80);
+    assert(richiesteIA.length === 1 && richiesteIA[0].url === 'http://localhost:4000/v1/models' && richiesteIA[0].auth === 'Bearer sk-prova', 'la verifica deve chiamare /v1/models con la chiave Bearer (trovato: ' + JSON.stringify(richiesteIA) + ')');
+    const selModello = doc.getElementById('f-ia-modello');
+    assert(selModello.tagName === 'SELECT', 'il modello deve essere un menu a tendina');
+    const valori = Array.from(selModello.options).map(o => o.value);
+    assert(valori.includes('gpt-uno') && valori.includes('<img src=x onerror=alert(1)>'), 'la verifica deve riempire il menu con i modelli del server');
+    assert(!doc.querySelector('#ia-corpo img'), 'il testo ricevuto dal server non deve mai diventare HTML');
+
+    selModello.value = 'gpt-uno';
+    cambia(selModello);
+    clic(doc.getElementById('btn-ia-salva'));
+    await attendi(80);
+    const salvate = window.Dati.stato().impostazioniIA;
+    assert(salvate.tipoServer === 'openai' && salvate.modello === 'gpt-uno' && salvate.chiaveApi === 'sk-prova' && salvate.indirizzoServer === 'http://localhost:4000', 'il salvataggio deve scrivere tipoServer/modello/chiaveApi/indirizzo (trovato: ' + JSON.stringify(salvate) + ')');
+
+    // Elenco non disponibile: si può digitare il nome a mano
+    window.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
+    window.UiIA.render();
+    doc.getElementById('f-ia-modello').value = '__manuale__';
+    cambia(doc.getElementById('f-ia-modello'));
+    assert(visibile(doc.getElementById('f-ia-modello-manuale')), 'scegliendo Altro deve comparire il campo per il nome a mano');
+    doc.getElementById('f-ia-modello-manuale').value = 'mio-modello';
+    clic(doc.getElementById('btn-ia-salva'));
+    await attendi(80);
+    assert(window.Dati.stato().impostazioniIA.modello === 'mio-modello', 'il nome digitato a mano deve essere salvato');
+
+    // Ripristino: Ollama come default per i test seguenti
+    await window.Dati.salvaImpostazioniIA({ tipoServer: 'ollama', chiaveApi: '', indirizzoServer: 'http://192.168.1.50:11434', modello: 'qwen3:8b' });
+    delete window.fetch;
+  }
+
   // ---- Sonno: calcolo ore (incluso passaggio di mezzanotte) e salvataggio ----
   assert(window.UiSonno.calcolaOreDormite('23:00', '07:00') === 8, 'ore dormite 23:00->07:00 deve dare 8 (attraversa la mezzanotte)');
   assert(window.UiSonno.calcolaOreDormite('14:00', '15:30') === 1.5, 'ore dormite 14:00->15:30 (pisolino, stesso giorno) deve dare 1.5');

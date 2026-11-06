@@ -63,3 +63,14 @@ solo l'hash del token, mai il token).
 Nella versione impacchettata dell'app la cartella dati può coincidere con quella
 dell'app stessa (la cartella `userData` di Electron): in quel caso, per usare la CLI
 o il server MCP, imposta `ASSISTENTE_DATI` sulla cartella che l'app usa davvero.
+
+## Scegliere il modello dell'assistente integrato
+
+L'assistente IA dentro l'app (sezione **IA**) non usa solo Ollama: dal menu **Tipo di server** puoi scegliere
+- **Ollama**: indirizzo di solito `http://localhost:11434`; i modelli vengono da `/api/tags`.
+- **Compatibile OpenAI** (LiteLLM, LM Studio, llama.cpp server, vLLM, OpenRouter…): indirizzo ad esempio `http://localhost:4000` (anche con `/v1` finale, non viene duplicato); i modelli vengono da `/v1/models` e le risposte da `/v1/chat/completions`. La **Chiave API** è facoltativa: se la inserisci viene inviata come `Authorization: Bearer …` solo a quel server.
+
+Premi **Verifica connessione** per riempire il menu **Modello** con quelli offerti dal server, poi scegli e premi **Salva**. Se l'elenco non è disponibile, scegli «Altro…» nel menu e scrivi il nome a mano.
+
+La chiave API resta salvata sul dispositivo, in chiaro, nello stesso file dei tuoi dati (e nei backup/export): non usare chiavi con permessi più ampi del necessario.
+Le richieste partono dal processo principale dell'app (su PC) con controlli sugli argomenti e timeout di 10 s per l'elenco e 120 s per la generazione; gli errori mostrati non contengono mai la chiave.

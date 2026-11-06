@@ -1,7 +1,8 @@
 /**
  * ui-ia.js
- * Sezione IA: si collega a un server Ollama esterno (PC di casa, o un tuo
- * setup Termux) — mai un modello sul telefono stesso. Chat semplice: scrivi
+ * Sezione IA: si collega a un server esterno a scelta (Ollama, oppure uno
+ * compatibile OpenAI come LiteLLM o LM Studio; PC di casa o setup Termux) —
+ * mai un modello sul telefono stesso. Chat semplice: scrivi
  * cosa vuoi, l'IA risponde e può proporre modifiche ai tuoi dati (solo su
  * campi di testo libero come nome/descrizione/note), che vedi in anteprima
  * e applichi tu con un tocco. Non modifica mai nulla da sola.
@@ -108,15 +109,20 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
     cont.scrollTop = cont.scrollHeight;
   }
 
+  const TESTI_TIPO = {
+    ollama: { segnaposto: 'http://localhost:11434', aiuto: 'Non gira sul telefono: si collega a un server Ollama, di solito quello del tuo PC sulla stessa rete WiFi. Su PC di norma va bene "localhost".' },
+    openai: { segnaposto: 'http://localhost:4000', aiuto: "Qualunque server compatibile OpenAI (LiteLLM, LM Studio, llama.cpp, vLLM, OpenRouter...). Se l'indirizzo finisce già con /v1 non viene duplicato." }
+  };
+  const MODELLO_MANUALE = '__manuale__';
+  let modelliNoti = []; // ultimo elenco ottenuto da "Verifica connessione"
+
   function renderImpostazioni() {
     const cfg = Dati.stato().impostazioniIA;
+    const tipo = cfg.tipoServer === 'openai' ? 'openai' : 'ollama';
     return `
       <div class="card">
-        <h3>Server IA (Ollama)</h3>
-        <div class="elemento-meta" style="margin-bottom:10px;">
-          Non gira sul telefono: si collega a un server Ollama, di solito quello del tuo PC
-          sulla stessa rete WiFi. Su PC di norma va bene "localhost".
-        </div>
+        <h3>Server IA</h3>
+        <div class="elemento-meta" id="ia-aiuto-tipo" style="margin-bottom:10px;"></div>
         <div class="campo">
           <label>Abilitata</label>
           <div class="riga-btn">
@@ -125,12 +131,25 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
           </div>
         </div>
         <div class="campo">
+          <label>Tipo di server</label>
+          <select id="f-ia-tipo">
+            <option value="ollama" ${tipo === 'ollama' ? 'selected' : ''}>Ollama</option>
+            <option value="openai" ${tipo === 'openai' ? 'selected' : ''}>Compatibile OpenAI: LiteLLM, LM Studio…</option>
+          </select>
+        </div>
+        <div class="campo">
           <label>Indirizzo server</label>
-          <input type="text" id="f-ia-indirizzo" value="${UiRoutine.escapeHtml(cfg.indirizzoServer)}" placeholder="http://192.168.1.50:11434">
+          <input type="text" id="f-ia-indirizzo" value="${UiRoutine.escapeHtml(cfg.indirizzoServer)}" placeholder="${TESTI_TIPO[tipo].segnaposto}">
+        </div>
+        <div class="campo" id="campo-ia-chiave">
+          <label>Chiave API (facoltativa)</label>
+          <input type="password" id="f-ia-chiave" value="${UiRoutine.escapeHtml(cfg.chiaveApi || '')}" autocomplete="off">
+          <div class="elemento-meta">La chiave resta salvata sul dispositivo, in chiaro, insieme agli altri tuoi dati; viene inviata solo al server indicato sopra.</div>
         </div>
         <div class="campo">
           <label>Modello</label>
-          <input type="text" id="f-ia-modello" value="${UiRoutine.escapeHtml(cfg.modello)}" placeholder="Es. qwen3:8b">
+          <select id="f-ia-modello"></select>
+          <input type="text" id="f-ia-modello-manuale" style="margin-top:6px;" placeholder="Nome del modello, es. qwen3:8b">
         </div>
         <div class="riga-btn">
           <button class="btn btn-sm btn-accent" id="btn-ia-salva">Salva</button>
@@ -139,6 +158,48 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
         <div id="ia-test-risultato" class="elemento-meta" style="margin-top:8px;"></div>
       </div>
     `;
+  }
+
+  // Menu del modello: modelli noti + (se serve) quello salvato + "Altro…". Tutto via DOM/textContent.
+  function riempiMenuModello(selezionato) {
+    const sel = document.getElementById('f-ia-modello');
+    const manuale = document.getElementById('f-ia-modello-manuale');
+    const nomi = modelliNoti.slice();
+    if (selezionato && selezionato !== MODELLO_MANUALE && !nomi.includes(selezionato)) {
+      if (modelliNoti.length) { manuale.value = selezionato; selezionato = MODELLO_MANUALE; } // non è nell'elenco: nome a mano
+      else nomi.unshift(selezionato);
+    }
+    sel.textContent = '';
+    nomi.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+    const altro = document.createElement('option');
+    altro.value = MODELLO_MANUALE;
+    altro.textContent = 'Altro… (scrivi a mano)';
+    sel.appendChild(altro);
+    sel.value = selezionato || (nomi.length ? nomi[0] : MODELLO_MANUALE);
+    aggiornaCampoManuale();
+  }
+
+  function aggiornaCampoManuale() {
+    const mostra = document.getElementById('f-ia-modello').value === MODELLO_MANUALE;
+    const manuale = document.getElementById('f-ia-modello-manuale');
+    manuale.hidden = !mostra;
+    manuale.style.display = mostra ? '' : 'none';
+  }
+
+  function modelloScelto() {
+    const sel = document.getElementById('f-ia-modello');
+    return sel.value === MODELLO_MANUALE ? document.getElementById('f-ia-modello-manuale').value.trim() : sel.value;
+  }
+
+  function tipoScelto() { return document.getElementById('f-ia-tipo').value === 'openai' ? 'openai' : 'ollama'; }
+
+  function aggiornaCampiTipo() {
+    const tipo = tipoScelto();
+    const campoChiave = document.getElementById('campo-ia-chiave');
+    campoChiave.hidden = tipo !== 'openai';
+    campoChiave.style.display = tipo === 'openai' ? '' : 'none';
+    document.getElementById('f-ia-indirizzo').placeholder = TESTI_TIPO[tipo].segnaposto;
+    document.getElementById('ia-aiuto-tipo').textContent = TESTI_TIPO[tipo].aiuto;
   }
 
   function render() {
@@ -157,20 +218,45 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
 
     document.getElementById('btn-ia-on').addEventListener('click', async () => { await Dati.salvaImpostazioniIA({ abilitata: true }); render(); });
     document.getElementById('btn-ia-off').addEventListener('click', async () => { await Dati.salvaImpostazioniIA({ abilitata: false }); render(); });
+    riempiMenuModello(Dati.stato().impostazioniIA.modello);
+    aggiornaCampiTipo();
+    document.getElementById('f-ia-tipo').addEventListener('change', () => {
+      const tipo = tipoScelto();
+      const campoInd = document.getElementById('f-ia-indirizzo');
+      const altro = tipo === 'openai' ? 'ollama' : 'openai';
+      // se l'indirizzo è ancora quello predefinito dell'altro tipo, passa a quello del nuovo tipo
+      if (!campoInd.value.trim() || campoInd.value.trim() === TESTI_TIPO[altro].segnaposto) campoInd.value = TESTI_TIPO[tipo].segnaposto;
+      const modello = modelloScelto();
+      modelliNoti = [];
+      riempiMenuModello(modello);
+      aggiornaCampiTipo();
+    });
+    document.getElementById('f-ia-modello').addEventListener('change', aggiornaCampoManuale);
     document.getElementById('btn-ia-salva').addEventListener('click', async () => {
+      const tipo = tipoScelto();
       await Dati.salvaImpostazioniIA({
-        indirizzoServer: document.getElementById('f-ia-indirizzo').value.trim() || 'http://localhost:11434',
-        modello: document.getElementById('f-ia-modello').value.trim() || 'qwen3:8b'
+        tipoServer: tipo,
+        indirizzoServer: document.getElementById('f-ia-indirizzo').value.trim() || TESTI_TIPO[tipo].segnaposto,
+        chiaveApi: document.getElementById('f-ia-chiave').value.trim(),
+        modello: modelloScelto() || (tipo === 'ollama' ? 'qwen3:8b' : '')
       });
       window.App.mostraToast('Impostazioni IA salvate.');
     });
     document.getElementById('btn-ia-test').addEventListener('click', async () => {
       const box = document.getElementById('ia-test-risultato');
       box.textContent = 'Verifica in corso…';
-      const risultato = await ClienteIA.testConnessione();
-      box.textContent = risultato.ok
-        ? `Connesso. Modelli disponibili: ${(risultato.modelli || []).join(', ') || '(nessuno trovato)'}`
-        : `Non raggiungibile: ${risultato.errore}`;
+      const tipo = tipoScelto();
+      const risultato = await ClienteIA.testConnessione({
+        tipoServer: tipo,
+        indirizzoServer: document.getElementById('f-ia-indirizzo').value.trim() || TESTI_TIPO[tipo].segnaposto,
+        chiaveApi: document.getElementById('f-ia-chiave').value.trim()
+      });
+      if (!risultato.ok) { box.textContent = 'Non raggiungibile: ' + risultato.errore; return; }
+      modelliNoti = (risultato.modelli || []).filter(m => typeof m === 'string');
+      riempiMenuModello(modelloScelto());
+      box.textContent = modelliNoti.length
+        ? 'Connesso. Modelli disponibili: ' + modelliNoti.length + ' (scegli dal menu Modello).'
+        : 'Connesso, ma il server non elenca modelli: scrivi il nome a mano (menu Modello, voce Altro).';
     });
 
     const invia = async () => {
@@ -182,7 +268,7 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
       renderChat();
       window.App.mostraToast('In attesa di risposta…');
 
-      const risultato = await ClienteIA.chiamaOllama(testo, promptSistema());
+      const risultato = await ClienteIA.chiamaIA(testo, promptSistema());
       if (!risultato.ok) {
         cronologia.push({ ruolo: 'assistente', testo: 'Errore: ' + risultato.errore, modifiche: [] });
       } else {
