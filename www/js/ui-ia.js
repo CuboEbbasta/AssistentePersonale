@@ -2,111 +2,185 @@
  * ui-ia.js
  * Sezione IA: si collega a un server esterno a scelta (Ollama, oppure uno
  * compatibile OpenAI come LiteLLM o LM Studio; PC di casa o setup Termux) —
- * mai un modello sul telefono stesso. Chat semplice: scrivi
- * cosa vuoi, l'IA risponde e può proporre modifiche ai tuoi dati (solo su
- * campi di testo libero come nome/descrizione/note), che vedi in anteprima
- * e applichi tu con un tocco. Non modifica mai nulla da sola.
+ * mai un modello sul telefono stesso. Chat: scrivi cosa vuoi e l'IA risponde.
+ * Se chiedi di creare o modificare qualcosa (routine, task, obiettivi, diario,
+ * pasti, sonno) prepara una PROPOSTA con anteprima e bottoni Applica / Ignora:
+ * non modifica mai nulla da sola. La logica (prompt, estrazione del JSON,
+ * normalizzazione, validazione) è in core/assistente.js; qui c'è solo l'interfaccia.
+ *
+ * SICUREZZA: tutto il testo che arriva dall'IA è trattato come dato non fidato
+ * e inserito SOLO con textContent / nodi DOM, mai come HTML.
  */
 const UiIA = (function () {
-  // Whitelist di sicurezza: l'IA può proporre modifiche SOLO a questi campi.
-  const CAMPI_MODIFICABILI = {
-    routine: { array: 'routine', campi: ['nome', 'descrizione'] },
-    task: { array: 'task', campi: ['nome', 'note'] },
-    obiettivo: { array: 'obiettivi', campi: ['titolo', 'descrizione'] }
-  };
+  // Conversazione in memoria: [{ruolo:'utente'|'assistente', testo, proposta?, anteprima?, esito?, avviso?}]
+  // esito: 'attesa' | 'applicata' | 'ignorata'
+  let cronologia = [];
+  let inAttesa = false;            // richiesta in corso (anti doppio invio)
+  const inApplicazione = new Set(); // proposte con "Applica" in corso (anti doppio clic)
+  let sequenza = 0;
 
-  let cronologia = []; // [{ruolo:'utente'|'assistente', testo, modifiche:[...]}]
-
-  function costruisciContesto() {
-    const s = Dati.stato();
-    return {
-      routine: s.routine.map(r => ({ id: r.id, nome: r.nome, tipo: r.tipo, descrizione: r.descrizione || '' })),
-      task: s.task.filter(t => !t.completata).slice(0, 30).map(t => ({ id: t.id, nome: t.nome, note: t.note || '', scadenza: t.scadenza })),
-      obiettivi: s.obiettivi.map(o => ({ id: o.id, titolo: o.titolo, tipo: o.tipo, descrizione: o.descrizione || '' }))
-    };
+  function el(tag, classe, testo) {
+    const e = document.createElement(tag);
+    if (classe) e.className = classe;
+    if (testo !== undefined && testo !== null) e.textContent = String(testo);
+    return e;
   }
 
-  function promptSistema() {
-    return `Sei l'assistente dentro un'app di produttività personale, in italiano.
-Ricevi il contesto attuale dei dati dell'utente in JSON. Rispondi SEMPRE e SOLO con un
-oggetto JSON valido, senza testo prima o dopo, con questa forma esatta:
-{"risposta": "testo della tua risposta per l'utente", "modifiche": [{"tipo":"routine|task|obiettivo","id":"...","campo":"nome|descrizione|note|titolo","nuovoValore":"..."}]}
-Il campo "modifiche" è un array (anche vuoto se non proponi nessuna modifica).
-Puoi proporre modifiche SOLO ai campi indicati sopra, riferendoti sempre a un id
-realmente presente nel contesto fornito. Non inventare id. Se non sei sicuro, lascia
-"modifiche" vuoto e chiedi chiarimenti nella risposta.
-Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
+  function oggi() { return DataUtils.oggiISO(); }
+
+  // ---- disegno della chat (solo DOM + textContent) ----
+
+  function bollaUtente(msg) {
+    const b = el('div', 'card-flat');
+    b.style.marginBottom = '8px';
+    b.style.background = 'var(--accent-soft)';
+    b.appendChild(el('strong', null, 'Tu: '));
+    b.appendChild(document.createTextNode(msg.testo));
+    return b;
   }
 
-  function estraiJSON(testo) {
-    try { return JSON.parse(testo); } catch (e) { /* prova a isolare il primo blocco {...} */ }
-    const inizio = testo.indexOf('{'), fine = testo.lastIndexOf('}');
-    if (inizio === -1 || fine === -1) return null;
-    try { return JSON.parse(testo.slice(inizio, fine + 1)); } catch (e) { return null; }
+  function bollaAssistente(msg) {
+    const b = el('div', 'card-flat');
+    b.style.marginBottom = '8px';
+    b.appendChild(el('strong', null, 'IA: '));
+    b.appendChild(document.createTextNode(msg.testo));
+    if (msg.proposta) b.appendChild(schedaProposta(msg));
+    return b;
   }
 
-  function validaModifica(m) {
-    if (!m || !m.tipo || !m.id || !m.campo) return false;
-    const regola = CAMPI_MODIFICABILI[m.tipo];
-    if (!regola || !regola.campi.includes(m.campo)) return false;
-    const entita = Dati.stato()[regola.array].find(x => x.id === m.id);
-    return !!entita;
-  }
+  function schedaProposta(msg) {
+    const p = msg.proposta;
+    const scheda = el('div');
+    scheda.style.cssText = 'margin-top:8px;padding:8px;border:1px solid var(--accent);border-radius:8px;';
+    scheda.setAttribute('data-proposta-ia', p.id);
+    scheda.appendChild(el('div', 'elemento-meta', 'Proposta (non ancora applicata)'));
+    const ul = el('ul');
+    ul.style.margin = '6px 0 6px 18px';
+    (p.anteprima || []).forEach(r => ul.appendChild(el('li', null, r)));
+    scheda.appendChild(ul);
 
-  async function applicaModifica(m, bottone) {
-    const regola = CAMPI_MODIFICABILI[m.tipo];
-    const entita = Dati.stato()[regola.array].find(x => x.id === m.id);
-    if (!entita) { window.App.mostraToast('Elemento non più esistente.'); return; }
-    entita[m.campo] = m.nuovoValore;
-    await Dati.salva();
-    window.App.aggiornaTutto();
-    bottone.closest('.card-flat').innerHTML = '<div class="elemento-meta">Modifica applicata.</div>';
-  }
+    if (msg.esito === 'applicata') { scheda.appendChild(el('div', 'elemento-meta', 'Applicata.')); return scheda; }
+    if (msg.esito === 'ignorata') { scheda.appendChild(el('div', 'elemento-meta', 'Ignorata.')); return scheda; }
 
-  function renderMessaggio(msg) {
-    const bolla = msg.ruolo === 'utente'
-      ? `<div class="card-flat" style="margin-bottom:8px;background:var(--accent-soft);"><strong>Tu:</strong> ${UiRoutine.escapeHtml(msg.testo)}</div>`
-      : `<div class="card-flat" style="margin-bottom:8px;"><strong>IA:</strong> ${UiRoutine.escapeHtml(msg.testo)}</div>`;
-
-    let modificheHtml = '';
-    if (msg.modifiche && msg.modifiche.length) {
-      modificheHtml = msg.modifiche.filter(validaModifica).map(m => {
-        const regola = CAMPI_MODIFICABILI[m.tipo];
-        const entita = Dati.stato()[regola.array].find(x => x.id === m.id);
-        const nomeAttuale = entita.nome || entita.titolo;
-        return `
-        <div class="card-flat" style="margin-bottom:8px;border:1px solid var(--accent);">
-          <div class="elemento-meta">Proposta per <strong>${UiRoutine.escapeHtml(nomeAttuale)}</strong> (${UiRoutine.escapeHtml(m.tipo)}, campo "${UiRoutine.escapeHtml(m.campo)}")</div>
-          <div style="margin:6px 0;font-size:13.5px;">${UiRoutine.escapeHtml(m.nuovoValore)}</div>
-          <div class="riga-btn">
-            <button class="btn btn-sm btn-ok btn-applica-modifica">${Icone.svg('check', 14)} Applica</button>
-            <button class="btn btn-sm btn-ghost btn-ignora-modifica">Ignora</button>
-          </div>
-        </div>`;
-      }).join('');
+    // in attesa: ricontrolla che sia ancora applicabile sui dati di adesso
+    const verifica = NucleoProposte.controllaApplicabile(Dati.stato(), p, oggi());
+    const applicabile = verifica.stato === 'applicabile';
+    if (!applicabile || msg.avviso) {
+      const box = el('div', 'elemento-meta');
+      box.setAttribute('data-avviso', '1');
+      if (!applicabile) {
+        box.appendChild(el('strong', null, verifica.stato === 'obsoleta' ? 'Non più applicabile: i dati sono cambiati. ' : 'Non applicabile. '));
+        box.appendChild(document.createTextNode((verifica.motivi || []).join('; ')));
+      } else box.textContent = msg.avviso;
+      scheda.appendChild(box);
     }
-    return bolla + modificheHtml;
+    const riga = el('div', 'riga-btn');
+    if (applicabile) {
+      const bA = el('button', 'btn btn-sm btn-ok');
+      bA.type = 'button';
+      bA.setAttribute('data-azione', 'applica');
+      bA.innerHTML = Icone.svg('check', 14) + ' ';
+      bA.appendChild(document.createTextNode('Applica'));
+      bA.disabled = inApplicazione.has(msg.idMessaggio);
+      bA.addEventListener('click', () => applica(msg));
+      riga.appendChild(bA);
+    }
+    const bI = el('button', 'btn btn-sm btn-ghost', 'Ignora');
+    bI.type = 'button';
+    bI.setAttribute('data-azione', 'ignora');
+    bI.addEventListener('click', () => { msg.esito = 'ignorata'; renderChat(); });
+    riga.appendChild(bI);
+    scheda.appendChild(riga);
+    return scheda;
   }
 
   function renderChat() {
     const cont = document.getElementById('ia-chat');
+    if (!cont) return;
+    cont.textContent = '';
     if (!cronologia.length) {
-      cont.innerHTML = '<div class="vuoto">Scrivi qualcosa qui sotto per iniziare.</div>';
+      cont.appendChild(el('div', 'vuoto', 'Scrivi qualcosa qui sotto per iniziare. Puoi chiedere di aggiungere o cambiare routine, task, obiettivi, diario, pasti e sonno: vedrai un\'anteprima e deciderai tu.'));
       return;
     }
-    cont.innerHTML = cronologia.map(renderMessaggio).join('');
-    const bottoniApplica = cont.querySelectorAll('.btn-applica-modifica');
-    const bottoniIgnora = cont.querySelectorAll('.btn-ignora-modifica');
-    let cursore = 0;
-    cronologia.forEach(msg => {
-      (msg.modifiche || []).filter(validaModifica).forEach(m => {
-        const bApplica = bottoniApplica[cursore], bIgnora = bottoniIgnora[cursore];
-        if (bApplica) bApplica.addEventListener('click', () => applicaModifica(m, bApplica));
-        if (bIgnora) bIgnora.addEventListener('click', () => { bIgnora.closest('.card-flat').remove(); });
-        cursore++;
-      });
-    });
+    cronologia.forEach(msg => cont.appendChild(msg.ruolo === 'utente' ? bollaUtente(msg) : bollaAssistente(msg)));
+    if (inAttesa) cont.appendChild(el('div', 'elemento-meta', 'L\'IA sta pensando…'));
     cont.scrollTop = cont.scrollHeight;
+  }
+
+  // ---- Applica ----
+
+  async function applica(msg) {
+    if (inApplicazione.has(msg.idMessaggio) || msg.esito) return;
+    inApplicazione.add(msg.idMessaggio);
+    msg.avviso = '';
+    renderChat();
+    try {
+      const r = NucleoProposte.applicaProposta(Dati.stato(), msg.proposta, { oggiISO: oggi(), generaId: Dati.generaId });
+      if (!r.ok) {
+        msg.avviso = 'Non applicabile: ' + (r.motivi || []).join('; ');
+        return;
+      }
+      const salvato = await Dati.sostituisciStato(r.stato);
+      if (!salvato) {
+        msg.avviso = 'Non sono riuscito a salvare i dati: la modifica NON è stata applicata. Riprova.';
+        return;
+      }
+      msg.esito = 'applicata';
+      if (window.App && window.App.aggiornaTutto) window.App.aggiornaTutto();
+      if (window.App && window.App.mostraToast) window.App.mostraToast('Modifica applicata.');
+    } catch (e) {
+      msg.avviso = 'Operazione non riuscita. Riprova.';
+    } finally {
+      inApplicazione.delete(msg.idMessaggio);
+      renderChat();
+    }
+  }
+
+  // ---- Invio della richiesta ----
+
+  function aggiornaStatoInvio() {
+    const b = document.getElementById('btn-ia-invia');
+    const i = document.getElementById('ia-input');
+    if (b) b.disabled = inAttesa;
+    if (i) i.disabled = inAttesa;
+  }
+
+  async function inviaRichiesta(testo) {
+    if (inAttesa || !testo) return;
+    const precedenti = cronologia.slice(); // conversazione prima di questa richiesta
+    cronologia.push({ ruolo: 'utente', testo });
+    inAttesa = true;
+    aggiornaStatoInvio();
+    renderChat();
+    let esito;
+    try {
+      esito = await NucleoAssistente.elabora({
+        testo, stato: Dati.stato(), oggiISO: oggi(), adessoISO: new Date().toISOString(), generaId: Dati.generaId,
+        cronologia: precedenti,
+        chiama: (prompt, sistema) => ClienteIA.chiamaIA(prompt, sistema, { json: true, think: false })
+      });
+    } catch (e) {
+      esito = { ok: false, errore: 'Operazione non riuscita. Riprova.' };
+    }
+    inAttesa = false;
+    if (!esito.ok) {
+      cronologia.push({ ruolo: 'assistente', testo: 'Errore: ' + esito.errore });
+    } else if (esito.errori.length) {
+      cronologia.push({ ruolo: 'assistente', testo: esito.messaggio });
+    } else {
+      const msg = { ruolo: 'assistente', testo: esito.risposta || (esito.proposta ? 'Ecco la proposta.' : 'Fatto.') };
+      if (esito.proposta) {
+        msg.proposta = esito.proposta;
+        msg.anteprima = esito.proposta.anteprima;
+        msg.esito = null;
+        msg.idMessaggio = 'ia_' + (++sequenza);
+      }
+      cronologia.push(msg);
+    }
+    renderChat();
+    aggiornaStatoInvio();
+    const input = document.getElementById('ia-input');
+    if (input) input.focus();
   }
 
   const TESTI_TIPO = {
@@ -209,7 +283,7 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
         <h3>Chiedi qualcosa</h3>
         <div id="ia-chat" style="max-height:340px;overflow-y:auto;margin-bottom:10px;"></div>
         <div class="riga-btn">
-          <input type="text" id="ia-input" placeholder="Es. Aggiorna la descrizione della routine Palestra..." style="flex:1;padding:9px 10px;border:1px solid var(--border-strong);border-radius:8px;">
+          <input type="text" id="ia-input" placeholder="Es. Aggiungi la routine Palestra il lunedì alle 18" style="flex:1;padding:9px 10px;border:1px solid var(--border-strong);border-radius:8px;">
           <button class="btn btn-accent" id="btn-ia-invia">Invia</button>
         </div>
       </div>
@@ -259,33 +333,19 @@ Contesto attuale: ${JSON.stringify(costruisciContesto())}`;
         : 'Connesso, ma il server non elenca modelli: scrivi il nome a mano (menu Modello, voce Altro).';
     });
 
-    const invia = async () => {
+    const invia = () => {
       const input = document.getElementById('ia-input');
       const testo = input.value.trim();
-      if (!testo) return;
-      cronologia.push({ ruolo: 'utente', testo });
+      if (!testo || inAttesa) return;
       input.value = '';
-      renderChat();
-      window.App.mostraToast('In attesa di risposta…');
-
-      const risultato = await ClienteIA.chiamaIA(testo, promptSistema());
-      if (!risultato.ok) {
-        cronologia.push({ ruolo: 'assistente', testo: 'Errore: ' + risultato.errore, modifiche: [] });
-      } else {
-        const parsed = estraiJSON(risultato.testo);
-        if (parsed && parsed.risposta) {
-          cronologia.push({ ruolo: 'assistente', testo: parsed.risposta, modifiche: parsed.modifiche || [] });
-        } else {
-          cronologia.push({ ruolo: 'assistente', testo: risultato.testo, modifiche: [] });
-        }
-      }
-      renderChat();
+      inviaRichiesta(testo);
     };
     document.getElementById('btn-ia-invia').addEventListener('click', invia);
     document.getElementById('ia-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') invia(); });
+    aggiornaStatoInvio();
   }
 
-  return { render, estraiJSON, validaModifica, CAMPI_MODIFICABILI };
+  return { render, estraiJSON: NucleoAssistente.estraiJSON };
 })();
 
 window.UiIA = UiIA;

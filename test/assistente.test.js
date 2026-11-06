@@ -22,7 +22,7 @@ test('prompt di sistema: data, giorno, tutti i campi esatti di ogni operazione, 
   }
   assert.match(p, /routine\.aggiungi:.*nome\*.*oraInizio\*.*giorni\*/);
   assert.match(p, /NON serve nessun id/);
-  assert.match(p, /domanda/);
+  assert.match(p, /domande/i);
   assert.match(p, /Fumetto/);
   assert.match(p, /nessun dato: puoi comunque creare/);
 });

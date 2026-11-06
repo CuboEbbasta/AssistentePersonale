@@ -497,18 +497,97 @@ async function main() {
   await window.Dati.salvaImpostazioniIA({ abilitata: true, indirizzoServer: 'http://192.168.1.50:11434', modello: 'qwen3:8b' });
   assert(window.Dati.stato().impostazioniIA.modello === 'qwen3:8b', 'le impostazioni IA devono salvarsi correttamente');
 
-  const jsonPulito = window.UiIA.estraiJSON('{"risposta":"ok","modifiche":[]}');
+  const jsonPulito = window.UiIA.estraiJSON('{"risposta":"ok","operazioni":[]}');
   assert(jsonPulito && jsonPulito.risposta === 'ok', 'estraiJSON deve interpretare un JSON pulito');
-  const jsonConTestoIntorno = window.UiIA.estraiJSON('Ecco qua: {"risposta":"fatto","modifiche":[]} grazie mille');
+  const jsonConTestoIntorno = window.UiIA.estraiJSON('Ecco qua: {"risposta":"fatto","operazioni":[]} grazie mille');
   assert(jsonConTestoIntorno && jsonConTestoIntorno.risposta === 'fatto', 'estraiJSON deve isolare il JSON anche se il modello aggiunge testo extra');
-  const jsonRotto = window.UiIA.estraiJSON('questo non e proprio json');
-  assert(jsonRotto === null, 'estraiJSON deve restituire null su testo non-JSON, senza lanciare eccezioni');
+  assert(window.UiIA.estraiJSON('questo non e proprio json') === null, 'estraiJSON deve restituire null su testo non-JSON, senza lanciare eccezioni');
 
-  const routineEsistenteId = window.Dati.stato().routine[0].id;
-  assert(window.UiIA.validaModifica({ tipo: 'routine', id: routineEsistenteId, campo: 'descrizione', nuovoValore: 'x' }) === true, 'una modifica su un campo whitelisted e un id reale deve validare');
-  assert(window.UiIA.validaModifica({ tipo: 'routine', id: routineEsistenteId, campo: 'oraInizio', nuovoValore: '10:00' }) === false, 'una modifica su un campo NON whitelisted (es. oraInizio) deve essere rifiutata');
-  assert(window.UiIA.validaModifica({ tipo: 'routine', id: 'id-inventato-inesistente', campo: 'descrizione', nuovoValore: 'x' }) === false, 'una modifica che punta a un id inesistente deve essere rifiutata');
-  assert(window.UiIA.validaModifica({ tipo: 'task', id: routineEsistenteId, campo: 'ambito', nuovoValore: 'anno' }) === false, 'non deve mai essere possibile proporre modifiche a campi strutturali come "ambito"');
+  // ---- IA: chat con proposte (crea/modifica tutto, sempre con Applica/Ignora) ----
+  {
+    const doc = window.document;
+    const attendi = (ms) => new Promise(r => setTimeout(r, ms));
+    const clic = (el) => el.dispatchEvent(new window.Event('click', { bubbles: true }));
+    window.App.mostraTab('ia');
+    window.UiIA.render();
+    const richieste = [];
+    let risposte = [];
+    window.fetch = async (url, init) => {
+      richieste.push({ url, corpo: JSON.parse(init.body) });
+      return { ok: true, status: 200, json: async () => ({ response: risposte.shift() }) };
+    };
+    const scrivi = async (testo) => {
+      doc.getElementById('ia-input').value = testo;
+      clic(doc.getElementById('btn-ia-invia'));
+      await attendi(120);
+    };
+
+    // 1) il caso reale dell'utente: la routine viene proposta, non applicata
+    const nRoutine = window.Dati.stato().routine.length;
+    risposte = ['{"risposta":"Ok <img src=x onerror=alert(1)> routine","operazioni":[{"tipo":"routine.aggiungi","id":"inventato","dati":{"nome":"Fumetto","oraInizio":"14:00","oraFine":"15:00","giorno":"Venerdi"}}]}'];
+    await scrivi('potresti aggiungere questo? - 14:00 alle 15:00: Fumetto per Venerdi');
+    assert(richieste.length === 1 && richieste[0].url === 'http://192.168.1.50:11434/api/generate', 'la chat deve chiamare /api/generate (trovato: ' + JSON.stringify(richieste.map(r => r.url)) + ')');
+    assert(richieste[0].corpo.format === 'json' && richieste[0].corpo.think === false, 'la chat deve chiedere la modalità JSON senza think');
+    assert(/Fumetto/.test(richieste[0].corpo.system) === true && /routine\.aggiungi/.test(richieste[0].corpo.system), 'il prompt di sistema deve contenere operazioni ed esempi');
+    assert(window.Dati.stato().routine.length === nRoutine, 'la proposta non deve modificare i dati prima di Applica');
+    const scheda = doc.querySelector('[data-proposta-ia]');
+    assert(scheda && /Fumetto/.test(scheda.textContent) && /14:00/.test(scheda.textContent), 'deve comparire la scheda proposta con anteprima');
+    assert(!doc.querySelector('#ia-chat img'), 'il testo dell\'IA non deve mai diventare HTML');
+    assert(doc.getElementById('ia-chat').textContent.includes('<img src=x'), 'il testo dell\'IA resta testo');
+    const bApplica = scheda.querySelector('[data-azione="applica"]');
+    assert(bApplica && scheda.querySelector('[data-azione="ignora"]'), 'devono esserci Applica e Ignora');
+    clic(bApplica); clic(bApplica); // doppio clic
+    await attendi(150);
+    const dopo = window.Dati.stato().routine;
+    assert(dopo.length === nRoutine + 1, 'Applica due volte di fila deve aggiungere UNA sola routine (trovate ' + (dopo.length - nRoutine) + ')');
+    const nuova = dopo[dopo.length - 1];
+    assert(nuova.nome === 'Fumetto' && nuova.oraInizio === '14:00' && nuova.durataMinuti === 60 && JSON.stringify(nuova.giorni) === '[5]', 'routine creata con i dati normalizzati (trovato: ' + JSON.stringify(nuova) + ')');
+    assert(!doc.querySelector('[data-proposta-ia] [data-azione="applica"]'), 'dopo Applica i bottoni spariscono');
+
+    // 2) il secondo messaggio include la conversazione precedente
+    risposte = ['{"risposta":"Bevi acqua e dormi.","operazioni":[]}'];
+    await scrivi('come dormo meglio?');
+    assert(/Conversazione recente/.test(richieste[1].corpo.prompt) && /Fumetto/.test(richieste[1].corpo.prompt), 'il prompt deve includere i messaggi precedenti');
+    assert(doc.getElementById('ia-chat').textContent.includes('Bevi acqua'), 'risposta senza operazioni mostrata');
+    assert(doc.querySelectorAll('[data-proposta-ia]').length === 1, 'nessuna nuova proposta per una domanda');
+
+    // 3) proposta non valida: una sola correzione, poi messaggio chiaro (mai il JSON grezzo)
+    const prima = richieste.length;
+    risposte = ['{"risposta":"x","operazioni":[{"tipo":"routine.aggiungi","dati":{"nome":"Yoga"}}]}', '{"risposta":"x","operazioni":[{"tipo":"routine.aggiungi","dati":{"nome":"Yoga"}}]}'];
+    await scrivi('aggiungi yoga');
+    assert(richieste.length === prima + 2, 'massimo UNA richiesta di correzione (chiamate: ' + (richieste.length - prima) + ')');
+    assert(/oraInizio/.test(richieste[prima + 1].corpo.prompt), 'la correzione deve riportare l\'errore al modello');
+    const chat = doc.getElementById('ia-chat').textContent;
+    assert(/oraInizio/.test(chat) && !chat.includes('"tipo"'), 'errore chiaro in italiano, non il JSON grezzo');
+    assert(doc.querySelectorAll('[data-proposta-ia]').length === 1, 'nessuna proposta se non valida');
+
+    // 4) Ignora, e la modifica di un elemento esistente col suo id
+    risposte = ['{"risposta":"Sposto.","operazioni":[{"tipo":"routine.modifica","id":"' + nuova.id + '","dati":{"oraInizio":"16:00"}}]}'];
+    await scrivi('sposta il fumetto alle 16');
+    const schede = doc.querySelectorAll('[data-proposta-ia]');
+    assert(schede.length === 2 && /Modifica routine «Fumetto»/.test(schede[1].textContent), 'anteprima della modifica');
+    clic(schede[1].querySelector('[data-azione="ignora"]'));
+    await attendi(30);
+    assert(window.Dati.stato().routine.find(r => r.id === nuova.id).oraInizio === '14:00', 'Ignora non modifica nulla');
+    assert(!doc.querySelectorAll('[data-proposta-ia]')[1].querySelector('[data-azione="applica"]'), 'dopo Ignora niente Applica');
+
+    // 5) proposta diventata obsoleta: niente Applica, motivo mostrato
+    risposte = ['{"risposta":"Sposto.","operazioni":[{"tipo":"routine.modifica","id":"' + nuova.id + '","dati":{"oraInizio":"17:00"}}]}'];
+    await scrivi('mettilo alle 17');
+    window.Dati.stato().routine.find(r => r.id === nuova.id).nome = 'Fumetto 2';
+    window.UiIA.render();
+    const ultima = Array.from(doc.querySelectorAll('[data-proposta-ia]')).pop();
+    assert(!ultima.querySelector('[data-azione="applica"]') && ultima.querySelector('[data-avviso]'), 'una proposta obsoleta non si può applicare e mostra il motivo');
+
+    // 6) errore di rete
+    window.fetch = async () => { throw new Error('rete'); };
+    await scrivi('ciao');
+    assert(/Errore/.test(doc.getElementById('ia-chat').textContent), 'errore di rete mostrato in chat');
+    delete window.fetch;
+    window.Dati.stato().routine = window.Dati.stato().routine.filter(r => r.id !== nuova.id);
+    await window.Dati.salva();
+  }
+
 
   const risultatoTestIA = await window.ClienteIA.testConnessione();
   assert(risultatoTestIA.ok === false && typeof risultatoTestIA.errore === 'string', 'senza un server IA reale raggiungibile, testConnessione deve fallire con grazia (non lanciare eccezioni)');

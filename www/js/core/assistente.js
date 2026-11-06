@@ -88,17 +88,16 @@
 
   // ---------- esempi ----------
   function esempi(oggiISO) {
-    const domani = aggiungiGiorni(oggiISO, 1);
     const J = (o) => JSON.stringify(o);
     return [
       ['potresti aggiungere questo? - 14:00 alle 15:00: Fumetto per Venerdi',
         { risposta: 'Ti propongo la routine Fumetto il venerdì dalle 14:00 alle 15:00.', operazioni: [{ tipo: 'routine.aggiungi', dati: { nome: 'Fumetto', oraInizio: '14:00', durataMinuti: 60, giorni: [5] } }] }],
       ['ricordami di chiamare il dentista domani, priorità alta',
-        { risposta: 'Ti propongo una task per domani.', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'Chiamare il dentista', scadenza: domani, priorita: 8 } }] }],
+        { risposta: 'Ti propongo una task per domani.', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'Chiamare il dentista', scadenza: 'domani', priorita: 8 } }] }],
       ['ieri ho dormito dalle 23 alle 7, qualità 4',
-        { risposta: 'Registro il sonno di ieri.', operazioni: [{ tipo: 'sonno.imposta', dati: { data: aggiungiGiorni(oggiISO, -1), oraInizio: '23:00', oraFine: '07:00', qualita: 4 } }] }],
+        { risposta: 'Registro il sonno di ieri.', operazioni: [{ tipo: 'sonno.imposta', dati: { data: 'ieri', oraInizio: '23:00', oraFine: '07:00', qualita: 4 } }] }],
       ['a pranzo pasta al pomodoro: 600 kcal, 20 proteine, 90 carboidrati, 15 grassi',
-        { risposta: 'Aggiungo il pasto di oggi.', operazioni: [{ tipo: 'pasto.aggiungi', dati: { data: oggiISO, nome: 'Pasta al pomodoro', kcal: 600, proteine: 20, carboidrati: 90, grassi: 15 } }] }],
+        { risposta: 'Aggiungo il pasto di oggi.', operazioni: [{ tipo: 'pasto.aggiungi', dati: { data: 'oggi', nome: 'Pasta al pomodoro', kcal: 600, proteine: 20, carboidrati: 90, grassi: 15 } }] }],
       ['sposta la palestra alle 19 (nei dati c\'è: id routine_k3 | Palestra | 18:00)',
         { risposta: 'Sposto la palestra alle 19:00.', operazioni: [{ tipo: 'routine.modifica', id: 'routine_k3', dati: { oraInizio: '19:00' } }] }],
       ['cosa posso fare per dormire meglio?',
@@ -119,12 +118,14 @@
       descriviOperazioni(stato, oggiISO),
       '',
       'Regole:',
-      '- Se l\'utente chiede di aggiungere, creare, segnare o registrare qualcosa, metti sempre un\'operazione: non dire mai che non puoi.',
+      '- Metti operazioni SOLO se l\'utente chiede di aggiungere, creare, modificare, segnare o registrare qualcosa; in quel caso metti sempre l\'operazione e non dire mai che non puoi.',
+      '- Domande, consigli e chiacchiere ("come", "cosa", "perché", "?") NON sono richieste di modifica: rispondi con "operazioni":[].',
       '- "id" serve solo per le modifiche e solo se l\'elemento è nei dati qui sotto. Per aggiungere NON serve nessun id: non inventarlo e non chiederlo.',
       '- Se manca un dato non indispensabile usa i valori predefiniti, non fare domande: durata 30 minuti, priorità 5, giorni = tutti, data = oggi.',
       '- Orari in formato "HH:MM". Se c\'è un intervallo (dalle 14:00 alle 15:00) metti oraInizio e durataMinuti. Giorni: 1=lunedì … 7=domenica; "lunedì-venerdì" = [1,2,3,4,5].',
       '- Una routine si ripete nei giorni indicati; una task ha una scadenza (data AAAA-MM-GG, anche "domani").',
-      '- Se la richiesta è una domanda o una chiacchierata, rispondi senza operazioni (lista vuota).',
+      '- Se l\'utente fa riferimento a qualcosa detto prima ("quella che ti ho chiesto", "fallo", "sì"), ricostruisci la richiesta dalla conversazione recente e usa gli stessi dati.',
+      '- "tipo" è la categoria dell\'attività, non il nome: se non sei sicuro usa "altro" e non chiedere. Se l\'utente parla di "id" o di tipo (es. "crea tu l\'id", "metti altro") sono dettagli tecnici: il nome dell\'attività resta quello della richiesta originale.Per le date relative scrivi proprio "oggi", "domani", "dopodomani" o "ieri" (l\'app le converte): non calcolarle.',
       '- Fai solo quello che l\'utente ha chiesto, niente di più.',
       '',
       'Esempi:',
@@ -144,7 +145,7 @@
       const extra = Array.isArray(m.anteprima) && m.anteprima.length ? ' [proposta in attesa di conferma: ' + m.anteprima.map(a => taglia(a, 120)).join('; ') + ']' : '';
       return 'Assistente: ' + taglia(m.testo, 500) + extra;
     });
-    return 'Conversazione recente:\n' + righe.join('\n') + '\n\nNuova richiesta.\nUtente: ' + testo + '\nRisposta:';
+    return 'Conversazione recente:\n' + righe.join('\n') + '\n\nNuova richiesta (se riguarda quanto detto sopra, usa i dati della richiesta precedente: nome, orari, giorni).\nUtente: ' + testo + '\nRisposta:';
   }
 
   // ---------- estrazione tollerante del JSON ----------

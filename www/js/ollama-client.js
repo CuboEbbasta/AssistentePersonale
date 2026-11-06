@@ -60,16 +60,26 @@ const ClienteIA = (function () {
     }
   }
 
-  async function chiamaIA(prompt, promptSistema) {
+  // opzioni (facoltative): { json: true } risposta JSON dal server; { think: false } niente «ragionamento» (Ollama).
+  async function chiamaIA(prompt, promptSistema, opzioni) {
     const cfg = config();
     if (!cfg.abilitata) return { ok: false, errore: 'IA non abilitata nelle impostazioni.' };
     const completa = cfgCompleta();
     try {
       if (window.electronAPI && window.electronAPI.chiamaIA) {
-        return await window.electronAPI.chiamaIA(Object.assign({}, completa, { prompt, sistema: promptSistema || '' }));
+        // il processo main (ia/ipc-ia.js) applica json/think e, se il server rifiuta think, riprova senza
+        return await window.electronAPI.chiamaIA(Object.assign({}, completa, { prompt, sistema: promptSistema || '' }, opzioni && opzioni.json ? { json: true } : {}, opzioni && opzioni.think === false ? { think: false } : {}));
       }
-      const richiesta = NucleoClienteIA.costruisciGenerazione(completa, prompt, promptSistema || '');
-      const json = await leggiJson(richiesta.url, { method: 'POST', headers: richiesta.headers, body: richiesta.corpo }, TIMEOUT_GENERAZIONE_MS);
+      const invia = (o) => {
+        const richiesta = NucleoClienteIA.costruisciGenerazione(completa, prompt, promptSistema || '', o);
+        return leggiJson(richiesta.url, { method: 'POST', headers: richiesta.headers, body: richiesta.corpo }, TIMEOUT_GENERAZIONE_MS);
+      };
+      let json;
+      try { json = await invia(opzioni); } catch (e) {
+        // server vecchio che rifiuta «think» (400): riprova una volta senza
+        if (opzioni && opzioni.think === false && /codice 400/.test(e.message)) json = await invia({ json: opzioni.json });
+        else throw e;
+      }
       return { ok: true, testo: NucleoClienteIA.leggiGenerazione(completa.tipoServer, json) };
     } catch (e) {
       return { ok: false, errore: e.message };
