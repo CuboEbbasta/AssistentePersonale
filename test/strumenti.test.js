@@ -231,11 +231,10 @@ test('ap_oggi: non espone log ne orarioFisso', () => {
   assert.ok(!JSON.stringify(r).includes('completamenti') && !JSON.stringify(r).includes('materia'));
 });
 
-test('ap_proponi: chiavi extra o id su un tipo che non lo richiede -> errore, niente scritto', () => {
+test("ap_proponi: chiavi extra sull'operazione -> errore, niente scritto (l'id su un aggiungi invece è ignorato)", () => {
   const { dir, a } = conStato(() => {});
   const c = ctx(a, cl(['agenda']));
   for (const op of [
-    { tipo: 'task.aggiungi', id: 'x', dati: { nome: 'A' } },
     { tipo: 'task.aggiungi', dati: { nome: 'A' }, extra: true },
   ]) {
     assert.throws(() => S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: [op] }, c), S.ErroreStrumento);
@@ -280,4 +279,46 @@ test('stato.json troncato: ap_oggi e ap_proponi falliscono con errore generico e
   }
   assert.ok(leggiByte(dir, 'stato.json').equals(prima));
   assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['stato.json']);
+});
+
+test('ap_proponi: il motivo è facoltativo (i modelli piccoli spesso lo dimenticano)', () => {
+  const { dir, a } = conStato(() => {});
+  const r = S.eseguiStrumento('ap_proponi', { operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'Chiamare il dentista', priorita: 5, ambito: 'giorno', scadenza: OGGI } }] }, ctx(a, cl(['agenda'])));
+  assert.strictEqual(r.stato, 'in_attesa');
+  const p = a.elencaProposte()[0];
+  assert.ok(typeof p.motivo === 'string' && p.motivo.length > 0);
+  assert.match(r.anteprima[0], /priorità 5/);
+  assert.match(r.anteprima[0], /ambito giorno/);
+  const schema = S.STRUMENTI.find(t => t.name === 'ap_proponi').inputSchema;
+  assert.deepStrictEqual(schema.required, ['operazioni']);
+  assert.ok(dir);
+});
+
+test('ap_proponi: motivo non testo (numero) -> errore', () => {
+  const { a } = conStato(() => {});
+  assert.throws(() => S.eseguiStrumento('ap_proponi', { motivo: 42, operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'x' } }] }, ctx(a, cl(['agenda']))), S.ErroreStrumento);
+});
+
+test('ap_proponi: tollera i nomi di campo sbagliati dei modelli piccoli (accenti, sinonimi) e i numeri scritti come testo', () => {
+  const { a } = conStato(() => {});
+  const r = S.eseguiStrumento('ap_proponi', { operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'Chiamare il dentista', 'priorità': '5', data: OGGI, ambito: 'giorno' } }] }, ctx(a, cl(['agenda'])));
+  assert.strictEqual(r.stato, 'in_attesa');
+  const dati = a.elencaProposte()[0].operazioni[0].dati;
+  assert.deepStrictEqual(dati, { nome: 'Chiamare il dentista', priorita: 5, scadenza: OGGI, ambito: 'giorno' });
+});
+
+test('ap_proponi: un sinonimo non sovrascrive il campo giusto già presente; il campo sconosciuto è rifiutato con l\'elenco dei campi ammessi', () => {
+  const { a } = conStato(() => {});
+  assert.throws(
+    () => S.eseguiStrumento('ap_proponi', { operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'x', scadenza: OGGI, data: '2026-12-01' } }] }, ctx(a, cl(['agenda']))),
+    (e) => e instanceof S.ErroreStrumento && /campo non ammesso: data/.test(e.message) && /campi ammessi: .*scadenza/.test(e.message)
+  );
+  assert.strictEqual(a.elencaProposte().length, 0);
+});
+
+test('ap_proponi: un id inventato su un "aggiungi" viene ignorato (i modelli piccoli lo mettono spesso)', () => {
+  const { a } = conStato(() => {});
+  const r = S.eseguiStrumento('ap_proponi', { operazioni: [{ tipo: 'task.aggiungi', id: 'task_1', dati: { nome: 'Leggere' } }] }, ctx(a, cl(['agenda'])));
+  assert.strictEqual(r.stato, 'in_attesa');
+  assert.strictEqual('id' in a.elencaProposte()[0].operazioni[0], false);
 });

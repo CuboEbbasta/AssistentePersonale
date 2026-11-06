@@ -54,7 +54,7 @@ const STRUMENTI = [
     inputSchema: {
       type: 'object',
       properties: {
-        motivo: { type: 'string', description: 'Perche proponi queste modifiche' },
+        motivo: { type: 'string', description: 'Perche proponi queste modifiche (facoltativo)' },
         operazioni: {
           type: 'array',
           description: 'Elenco di operazioni da proporre',
@@ -70,7 +70,7 @@ const STRUMENTI = [
           },
         },
       },
-      required: ['motivo', 'operazioni'],
+      required: ['operazioni'],
       additionalProperties: false,
     },
   },
@@ -162,9 +162,40 @@ function apLeggi(args, ctx) {
   return vista;
 }
 
+
+// ---- Tolleranza per i modelli piccoli (8B): nomi di campo con accenti/maiuscole/sinonimi e numeri scritti come testo ----
+const norm = (k) => String(k).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+const SINONIMI = {
+  scadenza: ['data', 'entro', 'deadline', 'duedate', 'giorno'],
+  nome: ['titolo', 'title', 'name'], titolo: ['nome', 'title', 'name'],
+  priorita: ['priority', 'prio'], note: ['descrizione', 'description'],
+  oraInizio: ['ora', 'orario', 'inizio', 'start'], durataMinuti: ['durata', 'duration'],
+  durataStimataMinuti: ['durata', 'duration'],
+};
+const CAMPI_NUMERICI = new Set(['priorita', 'durataMinuti', 'durataStimataMinuti', 'kcal', 'proteine', 'carboidrati', 'grassi', 'qualita']);
+
+function normalizzaOperazione(op, stato, oggiISO) {
+  const def = Operazioni.OPERAZIONI[op.tipo];
+  if (!def) return op;
+  if (!def.richiedeId && ('id' in op || 'baseHash' in op)) { op = Object.assign({}, op); delete op.id; delete op.baseHash; } // un "aggiungi" non ha id
+  if (!op.dati || typeof op.dati !== 'object' || Array.isArray(op.dati)) return op;
+  const canonici = Object.keys(def.campi(stato, oggiISO));
+  const out = {};
+  const presenti = new Set(Object.keys(op.dati).filter(k => canonici.includes(k)));
+  for (const [k, v] of Object.entries(op.dati)) {
+    let c = canonici.includes(k) ? k : canonici.find(x => norm(x) === norm(k));
+    if (!c) c = canonici.find(x => (SINONIMI[x] || []).includes(norm(k)));
+    if (c && c !== k && presenti.has(c)) c = null; // il campo giusto c'è già: il sinonimo resta e verrà rifiutato
+    const chiave = c || k;
+    out[chiave] = (CAMPI_NUMERICI.has(chiave) && typeof v === 'string' && /^[0-9]+$/.test(v.trim())) ? Number(v.trim()) : v;
+    if (c) presenti.add(c);
+  }
+  return Object.assign({}, op, { dati: out });
+}
+
 function apProponi(args, ctx) {
   const { motivo, operazioni } = args;
-  if (typeof motivo !== 'string') throw new ErroreStrumento('Il motivo deve essere un testo.');
+  if (motivo !== undefined && motivo !== null && typeof motivo !== 'string') throw new ErroreStrumento('Il motivo deve essere un testo.');
   if (!Array.isArray(operazioni) || operazioni.length === 0) throw new ErroreStrumento('Serve almeno un\'operazione.');
   const tipiValidi = Object.keys(Operazioni.OPERAZIONI);
   operazioni.forEach((op, i) => {
@@ -180,9 +211,11 @@ function apProponi(args, ctx) {
   if (inAttesa >= MAX_IN_ATTESA) {
     throw new ErroreStrumento('Hai già ' + inAttesa + ' proposte in attesa (massimo ' + MAX_IN_ATTESA + '): aspetta che vengano approvate o rifiutate nell app prima di proporne altre.');
   }
+  const stato = ctx.archivio.leggiStato();
+  const operazioniNorm = operazioni.map(op => normalizzaOperazione(op, stato, ctx.oggiISO));
   const r = Proposte.creaProposta(
-    { client: ctx.client.nome, motivo, operazioni },
-    ctx.archivio.leggiStato(), ctx.oggiISO, ctx.adessoISO,
+    { client: ctx.client.nome, motivo: (typeof motivo === 'string' && motivo.trim()) ? motivo : "Richiesta dell'utente", operazioni: operazioniNorm },
+    stato, ctx.oggiISO, ctx.adessoISO,
     (prefisso) => prefisso + '_' + crypto.randomUUID()
   );
   if (!r.ok) throw new ErroreStrumento('Proposta non valida: ' + r.errori.join('; '));

@@ -245,7 +245,7 @@
 
     const campi = d.campi(stato, oggiISO);
     Object.keys(op.dati).forEach(k => {
-      if (!has(campi, k)) { errori.push('campo non ammesso: ' + k); return; }
+      if (!has(campi, k)) { errori.push('campo non ammesso: ' + k + ' (campi ammessi: ' + Object.keys(campi).join(', ') + ')'); return; }
       const e = campi[k](op.dati[k]);
       if (e) errori.push(k + ': ' + e);
     });

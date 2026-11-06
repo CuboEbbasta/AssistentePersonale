@@ -29,9 +29,9 @@
     const d = op.dati || {};
     const det = /\.modifica$/.test(op.tipo) ? dettaglioModifica(op, bers) : '';
     switch (op.tipo) {
-      case 'routine.aggiungi': return 'Aggiungi routine «' + d.nome + '»' + (d.oraInizio ? ' alle ' + d.oraInizio : '');
+      case 'routine.aggiungi': return 'Aggiungi routine «' + d.nome + '»' + (d.oraInizio ? ' alle ' + d.oraInizio : '') + (d.priorita ? ', priorità ' + d.priorita : '');
       case 'routine.modifica': return 'Modifica routine «' + ((bers && bers.nome) || d.nome || op.id) + '»' + det;
-      case 'task.aggiungi': return 'Aggiungi task «' + d.nome + '»' + (d.scadenza ? ' entro ' + d.scadenza : '');
+      case 'task.aggiungi': return 'Aggiungi task «' + d.nome + '»' + (d.scadenza ? ' entro ' + d.scadenza : '') + (d.priorita ? ', priorità ' + d.priorita : '') + (d.ambito ? ', ambito ' + d.ambito : '');
       case 'task.modifica': return 'Modifica task «' + ((bers && bers.nome) || d.nome || op.id) + '»' + det;
       case 'obiettivo.aggiungi': return 'Aggiungi obiettivo «' + d.titolo + '»';
       case 'obiettivo.modifica': return 'Modifica obiettivo «' + ((bers && bers.titolo) || d.titolo || op.id) + '»' + det;
