@@ -43,7 +43,17 @@ function creaGestoriDati(archivio) {
   return {
     statoLeggi() {
       return sicuro(() => {
-        if (!esiste('stato.json')) return { ok: true, json: null, daBackup: false };
+        if (!esiste('stato.json')) {
+          // senza stato.json ma con un backup valido: usa il backup (non reimportare le Preferences)
+          if (esiste('stato.bak.json')) {
+            try {
+              return { ok: true, json: JSON.stringify(archivio.leggiStatoDaBackup()), daBackup: true };
+            } catch (e) {
+              if (!(e instanceof ErroreArchivio) || e.code !== 'STATO_CORROTTO') throw e;
+            }
+          }
+          return { ok: true, json: null, daBackup: false };
+        }
         try {
           return { ok: true, json: JSON.stringify(archivio.leggiStato()), daBackup: false };
         } catch (e) {

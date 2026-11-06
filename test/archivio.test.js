@@ -191,3 +191,49 @@ test('aggiornaProposta ignora patch.id', (t) => {
   assert.strictEqual(r.id, 'p1');
   assert.deepStrictEqual(a.elencaProposte().map((p) => p.id), ['p1']);
 });
+
+test('stato.json JSON valido ma non oggetto (null, array, numero, stringa) -> STATO_CORROTTO', (t) => {
+  const d = tmp(t);
+  const a = creaArchivio(d);
+  for (const contenuto of ['null', '[]', '[1,2]', '42', '"testo"', 'true']) {
+    fs.writeFileSync(path.join(d, 'stato.json'), contenuto);
+    assert.throws(() => a.leggiStato(), (e) => e instanceof ErroreArchivio && e.code === 'STATO_CORROTTO', contenuto);
+    fs.writeFileSync(path.join(d, 'stato.bak.json'), contenuto);
+    assert.throws(() => a.leggiStatoDaBackup(), (e) => e instanceof ErroreArchivio && e.code === 'STATO_CORROTTO', 'bak ' + contenuto);
+  }
+});
+
+test('scrivere sopra uno stato.json corrotto lo conserva come stato.corrotto-<timestamp>.json', (t) => {
+  const d = tmp(t);
+  const a = creaArchivio(d);
+  a.scriviStato(Schema.statoDefault());
+  a.scriviStato(Schema.statoDefault()); // ora esiste il backup
+  const backupPrima = fs.readFileSync(path.join(d, 'stato.bak.json'), 'utf8');
+  fs.writeFileSync(path.join(d, 'stato.json'), '{"troncato');
+  const nuovo = Object.assign(Schema.statoDefault(), { routine: [{ id: 'nuova' }] });
+  a.scriviStato(nuovo);
+  const corrotti = fs.readdirSync(d).filter(n => /^stato\.corrotto-.+\.json$/.test(n));
+  assert.strictEqual(corrotti.length, 1);
+  assert.strictEqual(fs.readFileSync(path.join(d, corrotti[0]), 'utf8'), '{"troncato');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(d, 'stato.json'), 'utf8')).routine[0].id, 'nuova');
+  assert.strictEqual(fs.readFileSync(path.join(d, 'stato.bak.json'), 'utf8'), backupPrima);
+});
+
+test('anche uno stato.json valido ma non oggetto viene conservato prima di essere sovrascritto', (t) => {
+  const d = tmp(t);
+  const a = creaArchivio(d);
+  fs.writeFileSync(path.join(d, 'stato.json'), '[1]');
+  a.scriviStato(Schema.statoDefault());
+  const corrotti = fs.readdirSync(d).filter(n => n.startsWith('stato.corrotto-'));
+  assert.strictEqual(corrotti.length, 1);
+  assert.strictEqual(fs.readFileSync(path.join(d, corrotti[0]), 'utf8'), '[1]');
+  assert.ok(!fs.existsSync(path.join(d, 'stato.bak.json')));
+});
+
+test('uno stato.json valido non genera file corrotti', (t) => {
+  const d = tmp(t);
+  const a = creaArchivio(d);
+  a.scriviStato(Schema.statoDefault());
+  a.scriviStato(Schema.statoDefault());
+  assert.ok(!fs.readdirSync(d).some(n => n.startsWith('stato.corrotto-')));
+});

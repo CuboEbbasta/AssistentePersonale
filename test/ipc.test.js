@@ -94,3 +94,20 @@ test('errori interni: nessuno stack né percorso verso il renderer', (t) => {
     assert.ok(!JSON.stringify(r).includes('boom'));
   }
 });
+
+test('stato.json mancante ma stato.bak.json valido: usa il backup, non reimporta le Preferences', (t) => {
+  const { g, d } = setup(t);
+  g.statoScrivi(JSON.stringify(Object.assign(Schema.statoDefault(), { routine: [{ id: 'b1' }] })));
+  g.statoScrivi(JSON.stringify(Object.assign(Schema.statoDefault(), { routine: [{ id: 'b2' }] })));
+  fs.unlinkSync(path.join(d, 'stato.json'));
+  const r = g.statoLeggi();
+  assert.ok(r.ok && r.daBackup === true);
+  assert.strictEqual(JSON.parse(r.json).routine[0].id, 'b1');
+  assert.ok(!fs.existsSync(path.join(d, 'stato.json'))); // la lettura non scrive
+});
+
+test('stato.json mancante e backup illeggibile: come se non ci fossero dati (json null)', (t) => {
+  const { g, d } = setup(t);
+  fs.writeFileSync(path.join(d, 'stato.bak.json'), '{"rotto');
+  assert.deepStrictEqual(g.statoLeggi(), { ok: true, json: null, daBackup: false });
+});

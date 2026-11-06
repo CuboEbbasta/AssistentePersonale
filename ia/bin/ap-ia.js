@@ -20,10 +20,13 @@ const USO = [
 
 class ErroreCli extends Error {}
 
+// Il testo dell'IA non deve poter muovere il cursore o colorare il terminale: via i caratteri di controllo
+const pulisci = (v) => String(v).replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+
 function testoAnteprima(p) {
   const a = p.anteprima;
-  if (Array.isArray(a)) return a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x)));
-  if (typeof a === 'string') return [a];
+  if (Array.isArray(a)) return a.map((x) => pulisci(typeof x === 'string' ? x : JSON.stringify(x)));
+  if (typeof a === 'string') return [pulisci(a)];
   return [];
 }
 
@@ -31,8 +34,8 @@ function comandoProposte(archivio, out) {
   const lista = archivio.elencaProposte();
   if (lista.length === 0) { out('Nessuna proposta.'); return; }
   for (const p of lista) {
-    out(`${p.id}  [${p.stato}]  client: ${p.client}${p.creataIl ? '  ' + p.creataIl : ''}`);
-    if (p.motivo) out('  Motivo: ' + p.motivo);
+    out(pulisci(`${p.id}  [${p.stato}]  client: ${p.client}${p.creatoIl ? '  ' + p.creatoIl : ''}`));
+    if (p.motivo) out('  Motivo: ' + pulisci(p.motivo));
     for (const r of testoAnteprima(p)) out('  - ' + r);
   }
 }

@@ -68,6 +68,15 @@ function leggiJson(file, descr, code = 'FILE_CORROTTO') {
   }
 }
 
+const eOggettoSemplice = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+// stato.json / stato.bak.json: JSON valido E oggetto semplice, altrimenti STATO_CORROTTO
+function leggiFileStato(file, descr) {
+  const v = leggiJson(file, descr, 'STATO_CORROTTO');
+  if (!eOggettoSemplice(v)) throw new ErroreArchivio('STATO_CORROTTO', `${descr} non contiene un oggetto`);
+  return v;
+}
+
 function creaArchivio(dir) {
   const f = (n) => path.join(dir, n);
   const assicuraDir = () => fs.mkdirSync(dir, { recursive: true });
@@ -131,19 +140,28 @@ function creaArchivio(dir) {
     conBlocco, // interno: usato dai test
     leggiStato() {
       if (!fs.existsSync(f('stato.json'))) return Schema.statoDefault();
-      return Schema.migra(leggiJson(f('stato.json'), 'stato.json', 'STATO_CORROTTO'));
+      return Schema.migra(leggiFileStato(f('stato.json'), 'stato.json'));
     },
     leggiStatoDaBackup() {
       if (!fs.existsSync(f('stato.bak.json'))) return Schema.statoDefault();
-      return Schema.migra(leggiJson(f('stato.bak.json'), 'stato.bak.json', 'STATO_CORROTTO'));
+      return Schema.migra(leggiFileStato(f('stato.bak.json'), 'stato.bak.json'));
     },
     scriviStato(stato) {
       assicuraDir();
       if (fs.existsSync(f('stato.json'))) {
-        try {
-          JSON.parse(fs.readFileSync(f('stato.json'), 'utf8')); // backup solo di uno stato valido
-          fs.copyFileSync(f('stato.json'), f('stato.bak.json'));
-        } catch (_) { /* attuale corrotto: non sovrascrivere il backup */ }
+        let testo = null;
+        try { testo = conRetry(() => fs.readFileSync(f('stato.json'), 'utf8')); } catch (_) { /* non leggibile ora: lascia stare */ }
+        if (testo !== null) {
+          let valido = false;
+          try { valido = eOggettoSemplice(JSON.parse(testo)); } catch (_) { /* JSON non valido */ }
+          if (valido) {
+            try { fs.copyFileSync(f('stato.json'), f('stato.bak.json')); } catch (_) { /* il backup e' best effort */ }
+          } else {
+            // attuale corrotto: non sovrascrivere il backup; conserva il file prima di scriverci sopra
+            const marca = new Date().toISOString().replace(/[:.]/g, '-');
+            try { conRetry(() => fs.renameSync(f('stato.json'), f(`stato.corrotto-${marca}.json`))); } catch (_) { /* best effort */ }
+          }
+        }
       }
       scriviAtomico(f('stato.json'), JSON.stringify(stato));
     },

@@ -93,3 +93,26 @@ test('comando sconosciuto e nessun comando', () => {
   assert.notStrictEqual(lancia(dir, 'boh').status, 0);
   assert.ok(lancia(dir).stdout.includes('Uso'));
 });
+
+test('proposte: mostra la data di creazione (creatoIl)', () => {
+  const dir = nuovaDir();
+  creaArchivio(dir).aggiungiProposta({ id: 'prop_d', stato: 'in_attesa', client: 'claude', creatoIl: '2026-11-05T10:00:00.000Z', anteprima: [] });
+  assert.ok(lancia(dir, 'proposte').stdout.includes('2026-11-05T10:00:00.000Z'));
+});
+
+test('proposte: i caratteri di controllo del testo dell IA non arrivano al terminale', () => {
+  const dir = nuovaDir();
+  creaArchivio(dir).aggiungiProposta({
+    id: 'prop_c', stato: 'in_attesa', client: 'cl\x1b[2Jaude',
+    motivo: 'ciao\x1b[31m rosso\r\nRIGA FINTA\x07\x7f',
+    anteprima: ['voce\x1b]0;titolo\x07 ok', 'nel\u0085mezzo'],
+  });
+  const r = lancia(dir, 'proposte');
+  assert.strictEqual(r.status, 0);
+  assert.ok(!/[\x00-\x09\x0b-\x1f\x7f-\x9f]/.test(r.stdout), 'nessun carattere di controllo (a parte i ritorni a capo della CLI)');
+  assert.ok(!r.stdout.includes('\x1b'));
+  assert.ok(r.stdout.includes('ciao[31m rosso'));
+  assert.ok(r.stdout.includes('RIGA FINTA'));
+  // «RIGA FINTA» resta nella stessa riga del motivo: non puo fingere una riga nuova
+  assert.ok(r.stdout.split('\n').some(l => l.startsWith('  Motivo: ') && l.includes('RIGA FINTA')));
+});

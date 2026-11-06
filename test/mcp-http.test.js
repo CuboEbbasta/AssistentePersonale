@@ -299,3 +299,23 @@ test('avviaServerMcp ascolta solo su 127.0.0.1 e risolve col server in ascolto',
     assert.strictEqual((await richiesta(server.address().port, { metodo: 'GET', percorso: '/salute' })).testo, 'ok');
   } finally { server.close(); server.closeAllConnections(); }
 });
+
+test('stato.json troncato: tools/call fallisce con errore generico e non scrive nulla', async () => {
+  const t = await avvia();
+  try {
+    fs.writeFileSync(path.join(t.dir, 'stato.json'), '{"versione": 1, "routine": [');
+    const prima = fs.readFileSync(path.join(t.dir, 'stato.json'));
+    for (const [id, name, args] of [
+      [1, 'ap_oggi', {}],
+      [2, 'ap_proponi', { motivo: 'm', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }] }],
+    ]) {
+      const r = await rpc(t.porta, t.token, { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+      const ris = JSON.parse(r.testo).result;
+      assert.strictEqual(ris.isError, true, name);
+      assert.ok(!r.testo.includes(path.basename(t.dir)) && !/Unexpected|stato[.]json/i.test(r.testo), r.testo);
+    }
+    assert.ok(fs.readFileSync(path.join(t.dir, 'stato.json')).equals(prima));
+    assert.deepStrictEqual(t.archivio.elencaProposte(), []);
+    assert.ok(!fs.existsSync(path.join(t.dir, 'proposte.json')));
+  } finally { await t.chiudi(); }
+});

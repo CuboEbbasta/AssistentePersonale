@@ -261,3 +261,23 @@ test('ap_proponi: con 49 proposte in attesa la 50a passa', () => {
   const r = S.eseguiStrumento('ap_proponi', { motivo: 'm', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }] }, ctx(a, cl(['agenda'])));
   assert.strictEqual(r.stato, 'in_attesa');
 });
+
+test('stato.json troncato: ap_oggi e ap_proponi falliscono con errore generico e non scrivono nulla', () => {
+  const { dir, a } = conStato(() => {});
+  const percorso = path.join(dir, 'stato.json');
+  fs.writeFileSync(percorso, '{"versione": 1, "routine": [');
+  const prima = leggiByte(dir, 'stato.json');
+  const c = ctx(a, cl(['agenda']));
+  for (const [nome, args] of [
+    ['ap_oggi', {}],
+    ['ap_proponi', { motivo: 'm', operazioni: [{ tipo: 'task.aggiungi', dati: { nome: 'A' } }] }],
+  ]) {
+    assert.throws(() => S.eseguiStrumento(nome, args, c), (e) => {
+      assert.ok(e instanceof S.ErroreStrumento);
+      assert.ok(!e.message.includes(dir) && !/JSON|stato\.json|Unexpected/i.test(e.message), e.message);
+      return true;
+    }, nome);
+  }
+  assert.ok(leggiByte(dir, 'stato.json').equals(prima));
+  assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['stato.json']);
+});
