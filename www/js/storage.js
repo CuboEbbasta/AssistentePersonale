@@ -302,7 +302,7 @@ const Dati = (function () {
   // ---------------- Export ----------------
   async function esporta() {
     const json = JSON.stringify(statoCorrente, null, 2);
-    const nomeFile = `assistente-backup-${DataUtils.oggiISO()}.json`;
+    const nomeFile = `kyklion-backup-${DataUtils.oggiISO()}.json`;
 
     // Su desktop (Electron) usiamo il vero filesystem del PC tramite una
     // finestra di salvataggio nativa (vedi desktop/preload.js e main.js):

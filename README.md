@@ -214,7 +214,7 @@ dimmelo e sistemiamo insieme.
 ## 4. Sincronizzare telefono e PC
 
 In **Impostazioni**:
-- **"Esporta dati"**: salva un file `assistente-backup-AAAA-MM-GG.json`
+- **"Esporta dati"**: salva un file `kyklion-backup-AAAA-MM-GG.json`
   (su Android si apre il menu di condivisione — es. Google Drive, email;
   su PC compare una finestra di salvataggio normale).
 - **"Importa e unisci"**: aggiunge i dati del file importato a quelli già
