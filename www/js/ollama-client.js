@@ -32,7 +32,36 @@ const ClienteIA = (function () {
     };
   }
 
+  // Dentro l'app Android si usa direttamente il plugin nativo CapacitorHttp: è più affidabile del fetch «patchato»
+  // (niente problemi di contenuto misto https→http né di segnale di timeout) e restituisce l'errore vero.
+  function plugHttpNativo() {
+    const C = window.Capacitor;
+    return (C && typeof C.isNativePlatform === 'function' && C.isNativePlatform() && C.Plugins && C.Plugins.CapacitorHttp) || null;
+  }
+
+  async function leggiJsonNativo(plug, url, init, timeoutMs) {
+    let r;
+    try {
+      r = await plug.request({
+        url, method: init.method || 'GET', headers: init.headers || {},
+        data: init.body ? JSON.parse(init.body) : undefined,
+        connectTimeout: 10000, readTimeout: timeoutMs, responseType: 'json'
+      });
+    } catch (e) {
+      const dettaglio = String((e && (e.message || e.errorMessage)) || e || '').slice(0, 160);
+      if (/time ?out|timed out/i.test(dettaglio)) throw new Error('Tempo scaduto: il server non ha risposto in ' + Math.round(timeoutMs / 1000) + ' secondi.');
+      throw new Error('Impossibile raggiungere ' + url.replace(/\?.*$/, '') + (dettaglio ? ' (' + dettaglio + ')' : '') + '.');
+    }
+    if (!r || r.status < 200 || r.status >= 300) throw new Error('Il server ha risposto con codice ' + (r && r.status) + '.');
+    let dati = r.data;
+    if (typeof dati === 'string') { try { dati = JSON.parse(dati); } catch (_) { throw new Error('Risposta del server non valida (non è JSON).'); } }
+    if (dati === null || typeof dati !== 'object') throw new Error('Risposta del server non valida (non è JSON).');
+    return dati;
+  }
+
   async function leggiJson(url, init, timeoutMs) {
+    const plug = plugHttpNativo();
+    if (plug) return leggiJsonNativo(plug, url, init, timeoutMs);
     let risposta;
     try {
       risposta = await fetch(url, Object.assign({}, init, { signal: AbortSignal.timeout(timeoutMs) }));

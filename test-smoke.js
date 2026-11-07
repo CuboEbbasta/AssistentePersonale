@@ -592,6 +592,35 @@ async function main() {
   const risultatoTestIA = await window.ClienteIA.testConnessione();
   assert(risultatoTestIA.ok === false && typeof risultatoTestIA.errore === 'string', 'senza un server IA reale raggiungibile, testConnessione deve fallire con grazia (non lanciare eccezioni)');
 
+  // ---- IA su Android: dentro l'app si usa il plugin nativo CapacitorHttp (non il fetch) e l'errore vero arriva all'utente ----
+  {
+    const capacitorOriginale = window.Capacitor;
+    const chiamate = [];
+    window.fetch = async () => { throw new Error('il fetch NON deve essere usato su Android'); };
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { CapacitorHttp: { request: async (o) => {
+      chiamate.push(o);
+      if (/\/api\/tags/.test(o.url)) return { status: 200, data: { models: [{ name: 'qwen3:8b' }, { name: 'gemma2:9b' }] } };
+      if (/\/api\/generate/.test(o.url)) return { status: 200, data: { response: '{"risposta":"ok","operazioni":[]}' } };
+      throw new Error('mai');
+    } } } };
+    Object.assign(window.Dati.stato().impostazioniIA, { abilitata: true, tipoServer: 'ollama', indirizzoServer: 'http://10.0.0.5:11434', modello: 'qwen3:8b' });
+    const elenco = await window.ClienteIA.testConnessione();
+    assert(elenco.ok === true && elenco.modelli.join() === 'qwen3:8b,gemma2:9b', 'Android: l\'elenco dei modelli arriva dal plugin nativo');
+    assert(chiamate[0].url === 'http://10.0.0.5:11434/api/tags' && chiamate[0].method === 'GET', 'Android: indirizzo e metodo corretti');
+    const gen = await window.ClienteIA.chiamaIA('ciao', 'sistema', { json: true });
+    assert(gen.ok === true && /risposta/.test(gen.testo), 'Android: la generazione passa dal plugin nativo');
+    const g = chiamate.find(c => /\/api\/generate/.test(c.url));
+    assert(g.method === 'POST' && typeof g.data === 'object' && g.data.model === 'qwen3:8b' && g.headers['Content-Type'] === 'application/json', 'Android: corpo JSON e intestazioni corretti');
+    // errore vero (es. traffico http non consentito): l'utente lo vede, non un generico «impossibile raggiungere»
+    window.Capacitor.Plugins.CapacitorHttp.request = async () => { throw new Error('Cleartext HTTP traffic to 10.0.0.5 not permitted'); };
+    const err = await window.ClienteIA.testConnessione();
+    assert(err.ok === false && /10\.0\.0\.5/.test(err.errore) && /Cleartext/.test(err.errore), 'Android: il messaggio d\'errore contiene indirizzo e causa reale: ' + err.errore);
+    window.Capacitor.Plugins.CapacitorHttp.request = async () => ({ status: 404, data: {} });
+    assert((await window.ClienteIA.testConnessione()).errore === 'Il server ha risposto con codice 404.', 'Android: codice di stato mostrato');
+    window.Capacitor = capacitorOriginale;
+    delete window.fetch;
+  }
+
   // ---- IA: scelta del server e del modello (Ollama / compatibile OpenAI) ----
   {
     const doc = window.document;
