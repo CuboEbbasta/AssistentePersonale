@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+// Numero di build di GitHub Actions: versionCode/versionName crescono a ogni build, così Android propone «Aggiorna».
+def numeroBuild = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+
 android {
     namespace = "com.assistente.personale"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +10,8 @@ android {
         applicationId "app.kyklion"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode numeroBuild
+        versionName "1.0.${numeroBuild}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,7 +19,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Chiave di firma STABILE (segreti di GitHub): senza, ogni build è firmata con una chiave nuova e Android non la accetta come aggiornamento.
+    signingConfigs {
+        kyklion {
+            if (System.getenv('KYKLION_KEYSTORE')) {
+                storeFile file(System.getenv('KYKLION_KEYSTORE'))
+                storeType 'pkcs12'
+                storePassword System.getenv('KYKLION_KS_PASS')
+                keyAlias System.getenv('KYKLION_KEY_ALIAS')
+                keyPassword System.getenv('KYKLION_KS_PASS')
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (System.getenv('KYKLION_KEYSTORE')) signingConfig signingConfigs.kyklion
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

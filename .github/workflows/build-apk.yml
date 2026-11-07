@@ -40,10 +40,24 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Prepara la chiave di firma stabile
+        id: firma
+        env:
+          KS_B64: ${{ secrets.KYKLION_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/kyklion.p12"
+            echo "percorso=$RUNNER_TEMP/kyklion.p12" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Compila l'APK (debug, installabile direttamente)
         if: steps.sync.outputs.codice == '0'
         id: gradle
         working-directory: android
+        env:
+          KYKLION_KEYSTORE: ${{ steps.firma.outputs.percorso }}
+          KYKLION_KS_PASS: ${{ secrets.KYKLION_KS_PASS }}
+          KYKLION_KEY_ALIAS: ${{ secrets.KYKLION_KEY_ALIAS }}
         run: |
           set +e
           chmod +x gradlew
