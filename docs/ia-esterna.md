@@ -113,3 +113,17 @@ Premi **Verifica connessione** per riempire il menu **Modello** con quelli offer
 
 La chiave API resta salvata sul dispositivo, in chiaro, nello stesso file dei tuoi dati (e nei backup/export): non usare chiavi con permessi più ampi del necessario.
 Le richieste partono dal processo principale dell'app (su PC) con controlli sugli argomenti e timeout di 10 s per l'elenco e 120 s per la generazione; gli errori mostrati non contengono mai la chiave.
+
+## Su telefono (Android)
+
+L'app Android è la stessa interfaccia del PC, con queste differenze volute:
+- **Assistente integrato (chat): sì.** Si configura in «Altro → Assistente IA»: tipo server, indirizzo, modello. Il telefono non fa girare il modello: si collega a un server sul PC.
+- **Accesso IA esterna (MCP) e «Proposte IA»: no.** Sono solo per il PC: un telefono non può fare da server per altre IA.
+- **I dati sono separati per dispositivo.** Per spostarli: «Impostazioni → Esporta backup» sul PC e importa il file sul telefono (o il contrario).
+
+Come collegare il telefono al modello del PC:
+1. Sul PC, Ollama deve ascoltare sulla rete: variabile `OLLAMA_HOST=0.0.0.0` (poi riavvia Ollama) e la porta 11434 consentita dal firewall.
+2. Sul telefono, nella stessa rete Wi-Fi: «Altro → Assistente IA», tipo **Ollama**, indirizzo `http://<IP-del-PC>:11434` (su Windows: `ipconfig`, «Indirizzo IPv4»), poi «Verifica connessione» e scegli il modello dal menu.
+3. Fuori casa: con Tailscale sul PC e sul telefono, usa l'indirizzo Tailscale del PC al posto dell'IP di casa.
+
+L'app Android ammette le connessioni `http://` (senza cifratura) perché l'indirizzo del tuo server locale è di solito un IP di rete domestica. Non inserire indirizzi `http://` su reti che non controlli.
